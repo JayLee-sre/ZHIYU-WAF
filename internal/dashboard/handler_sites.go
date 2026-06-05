@@ -80,6 +80,9 @@ func (s *Server) decodeSite(w http.ResponseWriter, r *http.Request) (model.Site,
 		http.Error(w, `{"error":"name, domains and upstream are required"}`, http.StatusBadRequest)
 		return site, false
 	}
+	if site.MaintenanceMode {
+		site.Enabled = true
+	}
 	if err := validateSiteUpstream(site.Upstream); err != nil {
 		http.Error(w, `{"error":"`+err.Error()+`"}`, http.StatusBadRequest)
 		return site, false

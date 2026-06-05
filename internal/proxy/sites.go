@@ -46,6 +46,7 @@ func (r *MemorySiteResolver) Update(sites []model.Site) {
 				Upstream:         normalizeUpstream(site.Upstream),
 				AIEnabled:        site.AIEnabled,
 				ChallengeEnabled: site.ChallengeEnabled,
+				MaintenanceMode:  site.MaintenanceMode,
 				SiteType:         site.SiteType,
 			}
 			if strings.HasPrefix(key, "*.") {

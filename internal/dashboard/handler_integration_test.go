@@ -11,6 +11,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"zhiyuwaf/internal/config"
+	"zhiyuwaf/internal/model"
 	"zhiyuwaf/internal/store"
 )
 
@@ -35,7 +36,12 @@ func setupTestServer(t *testing.T) (*httptest.Server, *store.Store) {
 
 func loginAndGetToken(t *testing.T, baseURL string) string {
 	t.Helper()
-	body, _ := json.Marshal(map[string]string{"username": "admin", "password": "testpassword123"})
+	return loginAndGetTokenWithPassword(t, baseURL, "admin", "testpassword123")
+}
+
+func loginAndGetTokenWithPassword(t *testing.T, baseURL, username, password string) string {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
 	resp, err := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatal(err)
@@ -48,6 +54,17 @@ func loginAndGetToken(t *testing.T, baseURL string) string {
 	var result map[string]string
 	json.NewDecoder(resp.Body).Decode(&result)
 	return result["token"]
+}
+
+func loginStatus(t *testing.T, baseURL, username, password string) int {
+	t.Helper()
+	body, _ := json.Marshal(map[string]string{"username": username, "password": password})
+	resp, err := http.Post(baseURL+"/api/v1/auth/login", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode
 }
 
 func authGet(t *testing.T, url, token string) *http.Response {
@@ -116,18 +133,54 @@ func TestIntegrationLoginFlow(t *testing.T) {
 	resp.Body.Close()
 }
 
+func TestIntegrationChangePasswordUpdatesCurrentUser(t *testing.T) {
+	ts, s := setupTestServer(t)
+
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("oldpassword123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateUser(model.User{
+		ID:           "admin-user",
+		Username:     "admin",
+		PasswordHash: string(oldHash),
+		Role:         "admin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	token := loginAndGetTokenWithPassword(t, ts.URL, "admin", "oldpassword123")
+	body, _ := json.Marshal(map[string]string{
+		"old_password": "oldpassword123",
+		"new_password": "newpassword123",
+	})
+	resp := authPost(t, ts.URL+"/api/v1/auth/password", token, bytes.NewReader(body))
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("change password failed (%d): %s", resp.StatusCode, string(b))
+	}
+
+	if status := loginStatus(t, ts.URL, "admin", "oldpassword123"); status != http.StatusUnauthorized {
+		t.Fatalf("old password should be rejected, got %d", status)
+	}
+	if status := loginStatus(t, ts.URL, "admin", "newpassword123"); status != http.StatusOK {
+		t.Fatalf("new password should be accepted, got %d", status)
+	}
+}
+
 func TestIntegrationRuleCRUD(t *testing.T) {
 	ts, _ := setupTestServer(t)
 	token := loginAndGetToken(t, ts.URL)
 
 	// Create rule
 	rule := map[string]interface{}{
-		"name":             "Test Rule",
-		"description":      "Integration test rule",
-		"severity":         "high",
-		"enabled":          true,
-		"patterns":         []string{`test-pattern`},
-		"match_locations":  []string{"url"},
+		"name":            "Test Rule",
+		"description":     "Integration test rule",
+		"severity":        "high",
+		"enabled":         true,
+		"patterns":        []string{`test-pattern`},
+		"match_locations": []string{"url"},
 	}
 	body, _ := json.Marshal(rule)
 	resp := authPost(t, ts.URL+"/api/v1/rules", token, bytes.NewReader(body))

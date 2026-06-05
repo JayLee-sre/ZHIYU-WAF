@@ -33,8 +33,8 @@
       <div class="stats-grid">
         <div class="stat-card"><span>站点总数</span><strong>{{ sites.length }}</strong></div>
         <div class="stat-card"><span>启用站点</span><strong>{{ enabledCount }}</strong></div>
+        <div class="stat-card warn"><span>维护模式</span><strong>{{ maintenanceCount }}</strong></div>
         <div class="stat-card"><span>AI 防护</span><strong>{{ aiCount }}</strong></div>
-        <div class="stat-card"><span>挑战页</span><strong>{{ challengeCount }}</strong></div>
       </div>
 
       <div class="ops-grid">
@@ -92,11 +92,17 @@
                 <div class="policy-tags">
                   <span v-if="site.ai_enabled">AI</span>
                   <span v-if="site.challenge_enabled">挑战页</span>
+                  <span v-if="site.maintenance_mode" class="warn">维护</span>
                   <span v-if="!site.ai_enabled && !site.challenge_enabled">基础规则</span>
                 </div>
               </td>
-              <td><span class="status-pill" :class="{ on: site.enabled }">{{ site.enabled ? '启用' : '停用' }}</span></td>
+              <td>
+                <span class="status-pill" :class="{ on: site.enabled && !site.maintenance_mode, warn: site.enabled && site.maintenance_mode }">
+                  {{ !site.enabled ? '停用' : site.maintenance_mode ? '维护中' : '启用' }}
+                </span>
+              </td>
               <td class="actions">
+                <button class="btn-emergency" @click="toggleMaintenance(site)">{{ site.maintenance_mode ? '恢复' : '维护' }}</button>
                 <button class="btn-ghost" @click="toggleSite(site)">{{ site.enabled ? '停用' : '启用' }}</button>
                 <button class="btn-ghost" @click="openEdit(site)">编辑</button>
                 <button class="btn-danger" @click="removeSite(site)">删除</button>
@@ -138,6 +144,7 @@
             <label><input type="checkbox" v-model="form.enabled" /> 启用站点</label>
             <label><input type="checkbox" v-model="form.ai_enabled" /> AI 检测</label>
             <label><input type="checkbox" v-model="form.challenge_enabled" /> 挑战页</label>
+            <label><input type="checkbox" v-model="form.maintenance_mode" /> 维护模式</label>
           </div>
           <div class="modal-actions">
             <button class="btn-ghost" @click="showDlg = false">取消</button>
@@ -169,8 +176,8 @@ const typeFilter = ref('')
 const form = reactive(defaultForm())
 
 const enabledCount = computed(() => sites.value.filter(s => s.enabled).length)
+const maintenanceCount = computed(() => sites.value.filter(s => s.maintenance_mode).length)
 const aiCount = computed(() => sites.value.filter(s => s.ai_enabled).length)
-const challengeCount = computed(() => sites.value.filter(s => s.challenge_enabled).length)
 const filteredSites = computed(() => {
   const kw = keyword.value.toLowerCase()
   return sites.value.filter((site) => {
@@ -181,7 +188,7 @@ const filteredSites = computed(() => {
 })
 
 function defaultForm() {
-  return { id: '', name: '', domains: [], upstream: '', enabled: true, ai_enabled: true, challenge_enabled: true, site_type: 'website' }
+  return { id: '', name: '', domains: [], upstream: '', enabled: true, ai_enabled: true, challenge_enabled: true, maintenance_mode: false, site_type: 'website' }
 }
 
 function typeText(t) {
@@ -238,6 +245,18 @@ async function toggleSite(site) {
   } catch {}
 }
 
+async function toggleMaintenance(site) {
+  try {
+    const next = !site.maintenance_mode
+    if (next) {
+      await ElMessageBox.confirm(`确认将「${site.name}」切换为维护模式？访问该站点的用户会看到“网站维护中”页面。`, '维护模式', { type: 'warning' })
+    }
+    await api.put(`/sites/${site.id}`, { ...site, enabled: next ? true : site.enabled, maintenance_mode: next })
+    ElMessage.success(next ? '站点已进入维护模式' : '站点已恢复访问')
+    loadSites()
+  } catch {}
+}
+
 async function removeSite(site) {
   try {
     await ElMessageBox.confirm(`确认删除站点「${site.name}」？`, '删除站点', { type: 'warning' })
@@ -255,8 +274,10 @@ onMounted(() => { if (isPro.value) loadSites() })
 .page-toolbar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
 .stat-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 16px; }
+.stat-card.warn { border-color: #fed7aa; background: #fff7ed; }
 .stat-card span { color: var(--text-secondary); font-size: 12px; font-weight: 700; }
 .stat-card strong { display: block; margin-top: 8px; font-size: 24px; color: var(--text-primary); }
+.stat-card.warn strong { color: #c2410c; }
 .ops-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 16px; }
 .ops-card { background: var(--bg-hover); border: 1px solid var(--border); border-radius: var(--radius-card); padding: 14px 16px; }
 .ops-card span { display: block; color: var(--text-secondary); font-size: 12px; font-weight: 800; margin-bottom: 6px; }
@@ -269,9 +290,20 @@ onMounted(() => { if (isPro.value) loadSites() })
 .domains, .policy-tags { display: flex; gap: 6px; flex-wrap: wrap; }
 .domains span, .policy-tags span { padding: 4px 8px; border-radius: 999px; background: var(--primary-light); color: var(--primary-text); font-size: 12px; font-weight: 700; }
 .policy-tags span { background: #ecfdf5; color: #15803d; }
+.policy-tags span.warn { background: #fff7ed; color: #c2410c; }
 .status-pill { padding: 4px 9px; border-radius: 999px; background: #f1f5f9; color: var(--text-secondary); font-size: 12px; font-weight: 800; }
 .status-pill.on { background: #ecfdf5; color: #15803d; }
+.status-pill.warn { background: #fff7ed; color: #c2410c; }
 .actions { display: flex; gap: 8px; }
+.btn-emergency {
+  border: 1px solid #fed7aa;
+  border-radius: var(--radius-input);
+  background: #fff7ed;
+  color: #c2410c;
+  font-weight: 800;
+  padding: 7px 10px;
+}
+.btn-emergency:hover { border-color: #fb923c; background: #ffedd5; }
 .upgrade-panel {
   display: flex; align-items: center; justify-content: space-between; gap: 24px;
   background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-card);

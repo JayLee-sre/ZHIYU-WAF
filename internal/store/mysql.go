@@ -121,6 +121,7 @@ func (s *MySQLStore) migrate() error {
 			enabled           TINYINT(1) DEFAULT 1,
 			ai_enabled        TINYINT(1) DEFAULT 1,
 			challenge_enabled TINYINT(1) DEFAULT 1,
+			maintenance_mode  TINYINT(1) DEFAULT 0,
 			site_type         VARCHAR(50) DEFAULT 'website',
 			created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
 			updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -159,7 +160,26 @@ func (s *MySQLStore) migrate() error {
 			return fmt.Errorf("create table: %w\nSQL: %s", err, stmt)
 		}
 	}
+	if err := s.ensureColumn("sites", "maintenance_mode", "ALTER TABLE sites ADD COLUMN maintenance_mode TINYINT(1) DEFAULT 0"); err != nil {
+		return err
+	}
 	return nil
+}
+
+func (s *MySQLStore) ensureColumn(table, column, alter string) error {
+	var count int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM information_schema.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = ? AND COLUMN_NAME = ?`,
+		table, column,
+	).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err = s.db.Exec(alter)
+	return err
 }
 
 // --- Settings ---
@@ -626,7 +646,7 @@ func (s *MySQLStore) IsIPInList(ip, listType string) (bool, error) {
 // --- Sites ---
 
 func (s *MySQLStore) ListSites() ([]model.Site, error) {
-	rows, err := s.db.Query("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, site_type, created_at, updated_at FROM sites ORDER BY created_at DESC")
+	rows, err := s.db.Query("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -635,7 +655,7 @@ func (s *MySQLStore) ListSites() ([]model.Site, error) {
 	for rows.Next() {
 		var site model.Site
 		var domainsJSON string
-		if err := rows.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.SiteType, &site.CreatedAt, &site.UpdatedAt); err != nil {
+		if err := rows.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.MaintenanceMode, &site.SiteType, &site.CreatedAt, &site.UpdatedAt); err != nil {
 			return nil, err
 		}
 		json.Unmarshal([]byte(domainsJSON), &site.Domains)
@@ -645,7 +665,7 @@ func (s *MySQLStore) ListSites() ([]model.Site, error) {
 }
 
 func (s *MySQLStore) ListEnabledSites() ([]model.Site, error) {
-	rows, err := s.db.Query("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, site_type, created_at, updated_at FROM sites WHERE enabled = 1 ORDER BY created_at DESC")
+	rows, err := s.db.Query("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites WHERE enabled = 1 ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -654,7 +674,7 @@ func (s *MySQLStore) ListEnabledSites() ([]model.Site, error) {
 	for rows.Next() {
 		var site model.Site
 		var domainsJSON string
-		if err := rows.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.SiteType, &site.CreatedAt, &site.UpdatedAt); err != nil {
+		if err := rows.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.MaintenanceMode, &site.SiteType, &site.CreatedAt, &site.UpdatedAt); err != nil {
 			return nil, err
 		}
 		json.Unmarshal([]byte(domainsJSON), &site.Domains)
@@ -666,8 +686,8 @@ func (s *MySQLStore) ListEnabledSites() ([]model.Site, error) {
 func (s *MySQLStore) GetSite(id string) (*model.Site, error) {
 	var site model.Site
 	var domainsJSON string
-	err := s.db.QueryRow("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, site_type, created_at, updated_at FROM sites WHERE id = ?", id).
-		Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.SiteType, &site.CreatedAt, &site.UpdatedAt)
+	err := s.db.QueryRow("SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites WHERE id = ?", id).
+		Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.MaintenanceMode, &site.SiteType, &site.CreatedAt, &site.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -681,15 +701,15 @@ func (s *MySQLStore) GetSite(id string) (*model.Site, error) {
 func (s *MySQLStore) CreateSite(site model.Site) error {
 	domainsJSON, _ := json.Marshal(mysqlNormalizeDomains(site.Domains))
 	now := time.Now()
-	_, err := s.db.Exec("INSERT INTO sites(id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, site_type, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		site.ID, site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.SiteType, now, now)
+	_, err := s.db.Exec("INSERT INTO sites(id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		site.ID, site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, now, now)
 	return err
 }
 
 func (s *MySQLStore) UpdateSite(site model.Site) error {
 	domainsJSON, _ := json.Marshal(mysqlNormalizeDomains(site.Domains))
-	_, err := s.db.Exec("UPDATE sites SET name=?, domains=?, upstream=?, enabled=?, ai_enabled=?, challenge_enabled=?, site_type=?, updated_at=? WHERE id=?",
-		site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.SiteType, time.Now(), site.ID)
+	_, err := s.db.Exec("UPDATE sites SET name=?, domains=?, upstream=?, enabled=?, ai_enabled=?, challenge_enabled=?, maintenance_mode=?, site_type=?, updated_at=? WHERE id=?",
+		site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, time.Now(), site.ID)
 	return err
 }
 

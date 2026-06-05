@@ -197,6 +197,44 @@ func TestStore_AuditEvents(t *testing.T) {
 	}
 }
 
+func TestStore_SiteMaintenanceMode(t *testing.T) {
+	s := newTestStore(t)
+
+	site := model.Site{
+		ID:              "site-1",
+		Name:            "官网",
+		Domains:         []string{"www.example.com"},
+		Upstream:        "127.0.0.1:3000",
+		Enabled:         true,
+		AIEnabled:       true,
+		MaintenanceMode: true,
+		SiteType:        "website",
+	}
+	if err := s.CreateSite(site); err != nil {
+		t.Fatalf("create site: %v", err)
+	}
+
+	got, err := s.GetSite(site.ID)
+	if err != nil {
+		t.Fatalf("get site: %v", err)
+	}
+	if got == nil || !got.MaintenanceMode {
+		t.Fatalf("expected maintenance mode to persist, got %+v", got)
+	}
+
+	got.MaintenanceMode = false
+	if err := s.UpdateSite(*got); err != nil {
+		t.Fatalf("update site: %v", err)
+	}
+	got, err = s.GetSite(site.ID)
+	if err != nil {
+		t.Fatalf("get updated site: %v", err)
+	}
+	if got == nil || got.MaintenanceMode {
+		t.Fatalf("expected maintenance mode to be disabled, got %+v", got)
+	}
+}
+
 func TestStore_Rules(t *testing.T) {
 	s := newTestStore(t)
 

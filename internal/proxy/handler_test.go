@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"zhiyuwaf/internal/engine"
+	"zhiyuwaf/internal/model"
 )
 
 func TestExtractRealClientIPIgnoresSpoofedForwardedHeaders(t *testing.T) {
@@ -41,6 +43,32 @@ func TestBuildParsedRequestRejectsOversizedBody(t *testing.T) {
 	_, err := handler.buildParsedRequest(req, 30*time.Second)
 	if err == nil {
 		t.Fatal("expected oversized body error")
+	}
+}
+
+func TestMaintenanceModeReturnsMaintenancePage(t *testing.T) {
+	handler := NewHandler("127.0.0.1:80", engine.NewPipeline(engine.NewRuleSet(), 60, 10), 30, 30)
+	handler.SetSiteResolver(NewMemorySiteResolver([]model.Site{{
+		ID:              "site-1",
+		Name:            "测试站点",
+		Domains:         []string{"www.example.com"},
+		Upstream:        "127.0.0.1:65535",
+		Enabled:         true,
+		MaintenanceMode: true,
+	}}))
+
+	req := httptest.NewRequest("GET", "http://www.example.com/", nil)
+	rec := httptest.NewRecorder()
+	handler.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("expected maintenance status %d, got %d", http.StatusServiceUnavailable, rec.Code)
+	}
+	if got := rec.Header().Get("Content-Type"); got != "text/html; charset=utf-8" {
+		t.Fatalf("unexpected content type: %q", got)
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("维护模式")) {
+		t.Fatalf("maintenance page missing expected text: %s", rec.Body.String())
 	}
 }
 

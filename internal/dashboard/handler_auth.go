@@ -163,30 +163,68 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storedHash, _ := s.store.GetSetting("admin_password_hash")
-	if storedHash == "" {
-		http.Error(w, `{"error":"no password set"}`, http.StatusBadRequest)
-		return
-	}
-	if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.OldPassword)); err != nil {
-		s.recordAudit("admin", dashboardClientIP(r), "password_change", "failed", "old password incorrect")
-		http.Error(w, `{"error":"old password incorrect"}`, http.StatusUnauthorized)
+	username, _ := r.Context().Value(contextKeyUserID).(string)
+	if username == "" {
+		http.Error(w, `{"error":"missing authenticated user"}`, http.StatusUnauthorized)
 		return
 	}
 
-	hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	user, err := s.store.GetUserByUsername(username)
+	if err == nil && user != nil {
+		if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.OldPassword)); err != nil {
+			s.recordAudit(username, dashboardClientIP(r), "password_change", "failed", "old password incorrect")
+			http.Error(w, `{"error":"old password incorrect"}`, http.StatusUnauthorized)
+			return
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, `{"error":"failed to hash password"}`, http.StatusInternalServerError)
+			return
+		}
+		if err := s.store.UpdateUserPassword(user.ID, string(hash)); err != nil {
+			http.Error(w, `{"error":"failed to save password"}`, http.StatusInternalServerError)
+			return
+		}
+
+		// Keep the legacy setting in sync for upgraded single-admin deployments.
+		if username == "admin" {
+			_ = s.store.SetSetting("admin_password_hash", string(hash))
+		}
+		s.recordAudit(username, dashboardClientIP(r), "password_change", "success", "user password changed")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
+		return
+	}
+
+	// Backward compatibility for deployments that only have the legacy admin password.
+	if username == "admin" {
+		storedHash, _ := s.store.GetSetting("admin_password_hash")
+		if storedHash == "" {
+			http.Error(w, `{"error":"no password set"}`, http.StatusBadRequest)
+			return
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.OldPassword)); err != nil {
+			s.recordAudit("admin", dashboardClientIP(r), "password_change", "failed", "old password incorrect")
+			http.Error(w, `{"error":"old password incorrect"}`, http.StatusUnauthorized)
+			return
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+		if err != nil {
+			http.Error(w, `{"error":"failed to hash password"}`, http.StatusInternalServerError)
+			return
+		}
+		if err := s.store.SetSetting("admin_password_hash", string(hash)); err != nil {
+			http.Error(w, `{"error":"failed to save password"}`, http.StatusInternalServerError)
+			return
+		}
+		s.recordAudit("admin", dashboardClientIP(r), "password_change", "success", "admin password changed")
+		writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
+		return
+	}
+
 	if err != nil {
-		http.Error(w, `{"error":"failed to hash password"}`, http.StatusInternalServerError)
-		return
+		log.Printf("password change user lookup failed for %s: %v", username, err)
 	}
-
-	if err := s.store.SetSetting("admin_password_hash", string(hash)); err != nil {
-		http.Error(w, `{"error":"failed to save password"}`, http.StatusInternalServerError)
-		return
-	}
-	s.recordAudit("admin", dashboardClientIP(r), "password_change", "success", "admin password changed")
-
-	writeJSON(w, http.StatusOK, map[string]string{"status": "password_changed"})
+	http.Error(w, `{"error":"user not found"}`, http.StatusBadRequest)
 }
 
 func dashboardClientIP(r *http.Request) string {

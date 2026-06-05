@@ -109,6 +109,7 @@ func (s *Store) migrate() error {
 		enabled           BOOLEAN DEFAULT 1,
 		ai_enabled        BOOLEAN DEFAULT 1,
 		challenge_enabled BOOLEAN DEFAULT 1,
+		maintenance_mode  BOOLEAN DEFAULT 0,
 		site_type         TEXT DEFAULT 'website',
 		created_at        DATETIME DEFAULT CURRENT_TIMESTAMP,
 		updated_at        DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -145,6 +146,11 @@ func (s *Store) migrate() error {
 		"site_id":        "ALTER TABLE attack_logs ADD COLUMN site_id TEXT DEFAULT ''",
 		"site_name":      "ALTER TABLE attack_logs ADD COLUMN site_name TEXT DEFAULT ''",
 		"domain":         "ALTER TABLE attack_logs ADD COLUMN domain TEXT DEFAULT ''",
+	}); err != nil {
+		return err
+	}
+	if err := s.ensureColumns("sites", map[string]string{
+		"maintenance_mode": "ALTER TABLE sites ADD COLUMN maintenance_mode BOOLEAN DEFAULT 0",
 	}); err != nil {
 		return err
 	}

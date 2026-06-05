@@ -10,6 +10,7 @@ type Site struct {
 	Enabled          bool      `json:"enabled"`
 	AIEnabled        bool      `json:"ai_enabled"`
 	ChallengeEnabled bool      `json:"challenge_enabled"`
+	MaintenanceMode  bool      `json:"maintenance_mode"`
 	SiteType         string    `json:"site_type"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`

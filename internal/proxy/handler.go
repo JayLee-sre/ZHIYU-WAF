@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"html"
 	"io"
 	"log"
 	"net"
@@ -45,6 +46,7 @@ type SiteRoute struct {
 	Upstream         string
 	AIEnabled        bool
 	ChallengeEnabled bool
+	MaintenanceMode  bool
 	SiteType         string
 }
 
@@ -159,6 +161,10 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	// Build parsed request for inspection
 	route := h.resolveSite(r.Host)
+	if route != nil && route.MaintenanceMode {
+		h.serveMaintenanceHTTP(w, route)
+		return
+	}
 	parsed, err := h.buildParsedRequest(r, cfg.readTimeout)
 	if err != nil {
 		http.Error(w, "Request Entity Too Large", http.StatusRequestEntityTooLarge)
@@ -334,6 +340,40 @@ func (h *Handler) serveLogoHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "public, max-age=86400")
 	w.WriteHeader(200)
 	w.Write([]byte(`<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="ZhiYu-WAF"><path d="M32 6L54 18V36C54 48 44 56 32 58C20 56 10 48 10 36V18L32 6Z" fill="url(#g)"/><path d="M23 34L30 41L42 28" stroke="white" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" opacity="0.9"/><defs><linearGradient id="g" x1="10" y1="6" x2="54" y2="58" gradientUnits="userSpaceOnUse"><stop stop-color="#6366F1"/><stop offset="1" stop-color="#A78BFA"/></linearGradient></defs></svg>`))
+}
+
+func (h *Handler) serveMaintenanceHTTP(w http.ResponseWriter, route *SiteRoute) {
+	siteName := "网站"
+	if route != nil && route.Name != "" {
+		siteName = route.Name
+	}
+	siteName = html.EscapeString(siteName)
+	body := fmt.Sprintf(`<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>%s维护中</title>
+  <style>
+    body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f8fafc;color:#111827;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+    main{max-width:560px;padding:40px 28px;text-align:center}
+    .badge{display:inline-flex;padding:6px 12px;border-radius:999px;background:#fff7ed;color:#c2410c;font-size:13px;font-weight:700}
+    h1{margin:18px 0 10px;font-size:28px;line-height:1.25}
+    p{margin:0;color:#4b5563;font-size:15px;line-height:1.8}
+  </style>
+</head>
+<body>
+  <main>
+    <div class="badge">ZhiYu WAF 维护模式</div>
+    <h1>%s维护中</h1>
+    <p>当前站点正在进行安全处置或系统维护，请稍后再访问。</p>
+  </main>
+</body>
+</html>`, siteName, siteName)
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	w.Write([]byte(body))
 }
 
 func (h *Handler) buildParsedRequest(r *http.Request, timeout time.Duration) (*model.ParsedRequest, error) {
