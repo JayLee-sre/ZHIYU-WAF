@@ -143,30 +143,36 @@ func (s *Server) handleExportLogs(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Fetch all matching logs in batches
-	var allLogs []model.AttackLog
-	offset := 0
-	for {
-		batch, total, err := s.store.ListAttackLogs(offset, 1000, filter)
-		if err != nil {
-			http.Error(w, `{"error":"failed to fetch logs"}`, http.StatusInternalServerError)
-			return
-		}
-		allLogs = append(allLogs, batch...)
-		offset += len(batch)
-		if offset >= total || len(batch) == 0 {
-			break
-		}
-	}
+	const batchSize = 1000
 
 	if format == "json" {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Content-Disposition", "attachment; filename=attack-logs-"+time.Now().Format("20060102")+".json")
-		json.NewEncoder(w).Encode(allLogs)
+		w.Write([]byte("["))
+		offset := 0
+		first := true
+		for {
+			batch, total, err := s.store.ListAttackLogs(offset, batchSize, filter)
+			if err != nil {
+				break
+			}
+			for _, l := range batch {
+				if !first {
+					w.Write([]byte(","))
+				}
+				first = false
+				json.NewEncoder(w).Encode(l)
+			}
+			offset += len(batch)
+			if offset >= total || len(batch) == 0 {
+				break
+			}
+		}
+		w.Write([]byte("]"))
 		return
 	}
 
-	// CSV format
+	// CSV format — stream rows in batches to avoid OOM
 	w.Header().Set("Content-Type", "text/csv")
 	w.Header().Set("Content-Disposition", "attachment; filename=attack-logs-"+time.Now().Format("20060102")+".csv")
 
@@ -174,18 +180,31 @@ func (s *Server) handleExportLogs(w http.ResponseWriter, r *http.Request) {
 	defer csvWriter.Flush()
 
 	csvWriter.Write([]string{"timestamp", "client_ip", "region", "method", "path", "rule_id", "rule_name", "severity", "source", "action"})
-	for _, l := range allLogs {
-		csvWriter.Write([]string{
-			l.Timestamp.Format(time.RFC3339),
-			l.ClientIP,
-			l.Region,
-			l.Method,
-			l.Path,
-			l.RuleID,
-			l.RuleName,
-			l.Severity,
-			l.Source,
-			l.Action,
-		})
+
+	offset := 0
+	for {
+		batch, total, err := s.store.ListAttackLogs(offset, batchSize, filter)
+		if err != nil {
+			break
+		}
+		for _, l := range batch {
+			csvWriter.Write([]string{
+				l.Timestamp.Format(time.RFC3339),
+				l.ClientIP,
+				l.Region,
+				l.Method,
+				l.Path,
+				l.RuleID,
+				l.RuleName,
+				l.Severity,
+				l.Source,
+				l.Action,
+			})
+		}
+		csvWriter.Flush()
+		offset += len(batch)
+		if offset >= total || len(batch) == 0 {
+			break
+		}
 	}
 }

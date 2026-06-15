@@ -21,9 +21,13 @@ type BackupData struct {
 }
 
 var sensitiveSettings = map[string]bool{
-	"admin_password_hash": true,
-	"license_token":       true,
-	"license_key":         true,
+	"admin_password_hash":   true,
+	"license_token":         true,
+	"license_key":           true,
+	"license_machine_id":    true,
+	"license_grace_until":   true,
+	"ai_openai_api_key":     true,
+	"threatintel_api_key":   true,
 }
 
 func (s *Server) handleExportBackup(w http.ResponseWriter, r *http.Request) {

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"net"
+	"sort"
 	"strings"
 	"sync"
 
@@ -59,6 +60,10 @@ func (r *MemorySiteResolver) Update(sites []model.Site) {
 			routes[key] = route
 		}
 	}
+	// Sort wildcards by suffix length descending so most-specific matches first
+	sort.Slice(wildcards, func(i, j int) bool {
+		return len(wildcards[i].suffix) > len(wildcards[j].suffix)
+	})
 	r.routes = routes
 	r.wildcards = wildcards
 }

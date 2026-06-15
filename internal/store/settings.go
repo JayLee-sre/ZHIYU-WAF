@@ -26,8 +26,10 @@ func (s *Store) ListSettings() (map[string]string, error) {
 	m := make(map[string]string)
 	for rows.Next() {
 		var k, v string
-		rows.Scan(&k, &v)
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
 		m[k] = v
 	}
-	return m, nil
+	return m, rows.Err()
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"regexp"
 	"strings"
 	"time"
 
@@ -410,7 +411,7 @@ func (s *MySQLStore) GetAIRuleSuggestionsBySite(since time.Time, minCount, limit
 			return nil, err
 		}
 		sgt.Key = sgt.RuleID + "|" + sgt.Path
-		sgt.Pattern = "^" + regexpQuoteMeta(sgt.Path) + "$"
+		sgt.Pattern = "^" + regexp.QuoteMeta(sgt.Path) + "$"
 		out = append(out, sgt)
 	}
 	return out, nil

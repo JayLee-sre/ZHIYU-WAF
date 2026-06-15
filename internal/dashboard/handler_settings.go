@@ -10,6 +10,17 @@ import (
 	"zhiyuwaf/internal/license"
 )
 
+// settingsSensitiveKeys are keys whose values must never be exposed via the API.
+var settingsSensitiveKeys = map[string]bool{
+	"admin_password_hash":   true,
+	"license_token":         true,
+	"license_key":           true,
+	"license_machine_id":    true,
+	"license_grace_until":   true,
+	"ai_openai_api_key":     true,
+	"threatintel_api_key":   true,
+}
+
 func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := s.store.ListSettings()
 	if err != nil {
@@ -17,7 +28,16 @@ func (s *Server) handleGetSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, settings)
+	// Filter out sensitive keys to prevent leaking credentials
+	cleaned := make(map[string]string)
+	for k, v := range settings {
+		if settingsSensitiveKeys[k] {
+			continue
+		}
+		cleaned[k] = v
+	}
+
+	writeJSON(w, http.StatusOK, cleaned)
 }
 
 // settingsProtectedKeys are keys that cannot be modified via the general settings API.

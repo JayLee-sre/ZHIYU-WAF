@@ -1,7 +1,6 @@
 package dashboard
 
 import (
-	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -20,7 +19,7 @@ func (s *Server) handleGetSSHStats(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"获取SSH统计失败"}`, 500)
 		return
 	}
-	json.NewEncoder(w).Encode(stats)
+	writeJSON(w, http.StatusOK, stats)
 }
 
 func (s *Server) handleListSSHEvents(w http.ResponseWriter, r *http.Request) {
@@ -42,7 +41,7 @@ func (s *Server) handleListSSHEvents(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"获取SSH事件失败"}`, 500)
 		return
 	}
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"data":  events,
 		"total": total,
 		"page":  page,

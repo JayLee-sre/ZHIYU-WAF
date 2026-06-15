@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
-	"strings"
+	"regexp"
 	"time"
 
 	"zhiyuwaf/internal/model"
@@ -81,7 +81,7 @@ func (s *Store) ListAttackLogs(offset, limit int, filter LogFilter) ([]model.Att
 		logs = append(logs, l)
 	}
 
-	return logs, total, nil
+	return logs, total, rows.Err()
 }
 
 func (s *Store) GetAttackLog(id string) (*model.AttackLog, error) {
@@ -145,8 +145,13 @@ func (s *Store) GetAttackStatsBySite(since time.Time, siteID string) (*AttackSta
 	for rows.Next() {
 		var sev string
 		var cnt int
-		rows.Scan(&sev, &cnt)
+		if err := rows.Scan(&sev, &cnt); err != nil {
+			return nil, err
+		}
 		stats.BySeverity[sev] = cnt
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	rows2, err := s.db.Query("SELECT source, COUNT(*) FROM attack_logs WHERE "+where+" GROUP BY source", args...)
@@ -157,8 +162,13 @@ func (s *Store) GetAttackStatsBySite(since time.Time, siteID string) (*AttackSta
 	for rows2.Next() {
 		var src string
 		var cnt int
-		rows2.Scan(&src, &cnt)
+		if err := rows2.Scan(&src, &cnt); err != nil {
+			return nil, err
+		}
 		stats.BySource[src] = cnt
+	}
+	if err := rows2.Err(); err != nil {
+		return nil, err
 	}
 
 	rows3, err := s.db.Query("SELECT path, COUNT(*) as cnt FROM attack_logs WHERE "+where+" GROUP BY path ORDER BY cnt DESC LIMIT 10", args...)
@@ -168,8 +178,13 @@ func (s *Store) GetAttackStatsBySite(since time.Time, siteID string) (*AttackSta
 	defer rows3.Close()
 	for rows3.Next() {
 		var pc PathCount
-		rows3.Scan(&pc.Path, &pc.Count)
+		if err := rows3.Scan(&pc.Path, &pc.Count); err != nil {
+			return nil, err
+		}
 		stats.TopAttackPaths = append(stats.TopAttackPaths, pc)
+	}
+	if err := rows3.Err(); err != nil {
+		return nil, err
 	}
 
 	rows4, err := s.db.Query("SELECT region, COUNT(*) as cnt FROM attack_logs WHERE "+where+" AND region != '' GROUP BY region ORDER BY cnt DESC LIMIT 10", args...)
@@ -177,8 +192,13 @@ func (s *Store) GetAttackStatsBySite(since time.Time, siteID string) (*AttackSta
 		defer rows4.Close()
 		for rows4.Next() {
 			var rc RegionCount
-			rows4.Scan(&rc.Region, &rc.Count)
+			if err := rows4.Scan(&rc.Region, &rc.Count); err != nil {
+				return nil, err
+			}
 			stats.TopRegions = append(stats.TopRegions, rc)
+		}
+		if err := rows4.Err(); err != nil {
+			return nil, err
 		}
 	}
 
@@ -231,30 +251,10 @@ func (s *Store) GetAIRuleSuggestionsBySite(since time.Time, minCount, limit int,
 			return nil, err
 		}
 		sgt.Key = sgt.RuleID + "|" + sgt.Path
-		sgt.Pattern = "^" + regexpQuoteMeta(sgt.Path) + "$"
+		sgt.Pattern = "^" + regexp.QuoteMeta(sgt.Path) + "$"
 		out = append(out, sgt)
 	}
-	return out, nil
-}
-
-func regexpQuoteMeta(s string) string {
-	replacer := strings.NewReplacer(
-		`\\`, `\\\\`,
-		`.`, `\.`,
-		`+`, `\+`,
-		`*`, `\*`,
-		`?`, `\?`,
-		`(`, `\(`,
-		`)`, `\)`,
-		`[`, `\[`,
-		`]`, `\]`,
-		`{`, `\{`,
-		`}`, `\}`,
-		`^`, `\^`,
-		`$`, `\$`,
-		`|`, `\|`,
-	)
-	return replacer.Replace(s)
+	return out, rows.Err()
 }
 
 // SSHEvent type is defined in interface.go.
@@ -296,10 +296,12 @@ func (s *Store) ListSSHEvents(offset, limit int, clientIP, eventType, username s
 	var events []SSHEvent
 	for rows.Next() {
 		var e SSHEvent
-		rows.Scan(&e.ID, &e.Timestamp, &e.ClientIP, &e.Region, &e.Username, &e.EventType, &e.Message)
+		if err := rows.Scan(&e.ID, &e.Timestamp, &e.ClientIP, &e.Region, &e.Username, &e.EventType, &e.Message); err != nil {
+			return nil, 0, err
+		}
 		events = append(events, e)
 	}
-	return events, total, nil
+	return events, total, rows.Err()
 }
 
 func (s *Store) GetSSHStats(since time.Time) (map[string]interface{}, error) {
@@ -326,7 +328,10 @@ func (s *Store) GetSSHStats(since time.Time) (map[string]interface{}, error) {
 		defer rows.Close()
 		for rows.Next() {
 			var ic IPCount
-			rows.Scan(&ic.IP, &ic.Region, &ic.Count)
+			if err := rows.Scan(&ic.IP, &ic.Region, &ic.Count); err != nil {
+				log.Printf("GetSSHStats scan error: %v", err)
+				continue
+			}
 			topIPs = append(topIPs, ic)
 		}
 	}

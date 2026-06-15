@@ -94,5 +94,21 @@ func ParseResponse(content string) (*AnalysisResponse, error) {
 			return nil, fmt.Errorf("no JSON found in AI response")
 		}
 	}
+	// Validate confidence is in [0, 1]
+	if resp.Confidence < 0 {
+		resp.Confidence = 0
+	}
+	if resp.Confidence > 1 {
+		resp.Confidence = 1
+	}
+	// Validate attack_type is a known value
+	validTypes := map[string]bool{"sqli": true, "xss": true, "cmdi": true, "traversal": true, "credential_stuffing": true, "bot": true, "normal": true}
+	if !validTypes[resp.AttackType] {
+		if resp.IsMalicious {
+			resp.AttackType = "unknown"
+		} else {
+			resp.AttackType = "normal"
+		}
+	}
 	return &resp, nil
 }

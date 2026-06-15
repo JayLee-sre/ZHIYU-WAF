@@ -33,6 +33,10 @@ func NewRateLimiter(requestsPerMinute, burst int) *RateLimiter {
 }
 
 func (rl *RateLimiter) Allow(ip string) bool {
+	// rpm <= 0 means rate limiting is disabled — allow all requests
+	if rl.rpm <= 0 {
+		return true
+	}
 	rl.mu.Lock()
 	entry, exists := rl.limiters[ip]
 	if !exists {
