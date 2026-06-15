@@ -71,7 +71,7 @@ func (h *Hub) Run() {
 			log.Printf("ws client disconnected, total: %d", len(h.clients))
 
 		case msg := <-h.broadcast:
-			h.mu.RLock()
+			h.mu.Lock()
 			for client := range h.clients {
 				select {
 				case client.send <- msg:
@@ -80,7 +80,7 @@ func (h *Hub) Run() {
 					delete(h.clients, client)
 				}
 			}
-			h.mu.RUnlock()
+			h.mu.Unlock()
 
 		case <-h.done:
 			h.mu.Lock()

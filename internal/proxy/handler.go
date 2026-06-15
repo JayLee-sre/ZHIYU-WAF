@@ -76,6 +76,8 @@ func NewHandler(backendAddr string, pipeline *engine.Pipeline, readTimeout, writ
 }
 
 func (h *Handler) SetSiteResolver(resolver SiteResolver) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.siteResolver = resolver
 }
 
@@ -86,6 +88,8 @@ func (h *Handler) SetDynamicProtect(enabled bool) {
 }
 
 func (h *Handler) SetMetricsCallbacks(onRequest, onBlocked func()) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
 	h.onRequest = onRequest
 	h.onBlocked = onBlocked
 }
@@ -154,9 +158,13 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	cfg := h.getConfig()
 
-	// Track request metrics
-	if h.onRequest != nil {
-		h.onRequest()
+	// Track request metrics (snapshot callbacks under lock to avoid data race)
+	h.mu.RLock()
+	onRequest := h.onRequest
+	onBlocked := h.onBlocked
+	h.mu.RUnlock()
+	if onRequest != nil {
+		onRequest()
 	}
 
 	// Build parsed request for inspection
@@ -187,8 +195,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// Observation mode: log but don't block
 			log.Printf("OBSERVE %s [%s] %s: %s (would block)", result.RuleID, result.Severity, result.RuleName, result.Message)
 		} else {
-			if h.onBlocked != nil {
-				h.onBlocked()
+			if onBlocked != nil {
+				onBlocked()
 			}
 			h.serveBlockedHTTP(w, result)
 			return
@@ -238,6 +246,11 @@ func (h *Handler) forwardRequestHTTP(w http.ResponseWriter, r *http.Request, bac
 				proto = "https"
 			}
 			req.Header.Set("X-Forwarded-Proto", proto)
+			// When dynamic protection is enabled, strip Accept-Encoding so the
+			// backend returns uncompressed HTML that we can safely mutate.
+			if dynamicProtect {
+				req.Header.Del("Accept-Encoding")
+			}
 		},
 		Transport: h.sharedTransport,
 		ErrorHandler: func(w http.ResponseWriter, r *http.Request, err error) {
@@ -289,11 +302,6 @@ func (h *Handler) handleTunnelHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	defer clientConn.Close()
 
-	// Flush any buffered data
-	if bufrw.Reader.Buffered() > 0 {
-		// There's buffered data we need to handle
-	}
-
 	backendConn, err := net.DialTimeout("tcp", r.Host, 10*time.Second)
 	if err != nil {
 		log.Printf("tunnel dial %s failed: %v", r.Host, err)
@@ -305,10 +313,11 @@ func (h *Handler) handleTunnelHTTP(w http.ResponseWriter, r *http.Request) {
 	// Respond 200 Connection Established
 	clientConn.Write([]byte("HTTP/1.1 200 Connection Established\r\n\r\n"))
 
-	// Bidirectional copy - wait for BOTH directions to finish
+	// Bidirectional copy — close connections on first error to unblock the other direction
 	errc := make(chan error, 2)
 	go func() {
-		_, err := io.Copy(backendConn, clientConn)
+		// Use bufrw as reader to include any buffered data from the hijack
+		_, err := io.Copy(backendConn, bufrw)
 		errc <- err
 	}()
 	go func() {
@@ -316,8 +325,11 @@ func (h *Handler) handleTunnelHTTP(w http.ResponseWriter, r *http.Request) {
 		errc <- err
 	}()
 
+	// Wait for first error, then close both connections to unblock the other goroutine
 	<-errc
-	<-errc
+	clientConn.Close()
+	backendConn.Close()
+	<-errc // drain the second error
 }
 
 func (h *Handler) handleVerifyHTTP(w http.ResponseWriter, r *http.Request) {
@@ -418,10 +430,13 @@ func (h *Handler) buildParsedRequest(r *http.Request, timeout time.Duration) (*m
 }
 
 func (h *Handler) resolveSite(host string) *SiteRoute {
-	if h.siteResolver == nil {
+	h.mu.RLock()
+	resolver := h.siteResolver
+	h.mu.RUnlock()
+	if resolver == nil {
 		return nil
 	}
-	if route, ok := h.siteResolver.ResolveSite(host); ok {
+	if route, ok := resolver.ResolveSite(host); ok {
 		return route
 	}
 	return nil

@@ -82,6 +82,24 @@ func clearLoginAttempts(ip string) {
 	delete(loginAttempts, ip)
 }
 
+func init() {
+	// Periodically clean up stale login attempt entries to prevent memory leaks
+	go func() {
+		ticker := time.NewTicker(30 * time.Minute)
+		defer ticker.Stop()
+		for range ticker.C {
+			loginMu.Lock()
+			now := time.Now()
+			for ip, attempt := range loginAttempts {
+				if now.Sub(attempt.lastTry) > 2*attemptWindow {
+					delete(loginAttempts, ip)
+				}
+			}
+			loginMu.Unlock()
+		}
+	}()
+}
+
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	clientIP := dashboardClientIP(r)
 

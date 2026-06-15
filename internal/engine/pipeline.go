@@ -6,6 +6,7 @@ import (
 	"log"
 	"regexp"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"zhiyuwaf/internal/engine/builtin"
@@ -33,6 +34,8 @@ type Pipeline struct {
 	attackLogCh     chan model.AttackLog
 	observationMode bool
 	mu              sync.RWMutex
+	closed          int32 // atomic: 1 if closed
+	inflight        sync.WaitGroup
 }
 
 func NewPipeline(ruleSet *RuleSet, rpm, burst int) *Pipeline {
@@ -47,7 +50,9 @@ func NewPipeline(ruleSet *RuleSet, rpm, burst int) *Pipeline {
 
 // Close shuts down the pipeline and its background resources.
 func (p *Pipeline) Close() {
+	atomic.StoreInt32(&p.closed, 1)
 	p.rateLimiter.Stop()
+	p.inflight.Wait() // wait for all in-flight inspections to finish
 	close(p.attackLogCh)
 }
 
@@ -94,6 +99,11 @@ func (p *Pipeline) IsObservationMode() bool {
 }
 
 func (p *Pipeline) Inspect(ctx context.Context, req *model.ParsedRequest) *DetectionResult {
+	if atomic.LoadInt32(&p.closed) == 1 {
+		return nil
+	}
+	p.inflight.Add(1)
+	defer p.inflight.Done()
 	start := time.Now()
 
 	// Stage 1: IP Whitelist - fast pass
@@ -195,6 +205,9 @@ func (p *Pipeline) Inspect(ctx context.Context, req *model.ParsedRequest) *Detec
 }
 
 func (p *Pipeline) emitLog(req *model.ParsedRequest, res *DetectionResult) {
+	if atomic.LoadInt32(&p.closed) == 1 {
+		return
+	}
 	headersJSON := ""
 	if len(req.Headers) > 0 {
 		if b, err := json.Marshal(req.Headers); err == nil {

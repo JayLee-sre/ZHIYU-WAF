@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"sync"
+	"time"
 
 	"zhiyuwaf/internal/acme"
 )
@@ -112,9 +113,11 @@ func (l *Listener) Start(ctx context.Context) error {
 	// Shutdown on context cancel
 	go func() {
 		<-ctx.Done()
-		l.server.Shutdown(context.Background())
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		l.server.Shutdown(shutdownCtx)
 		if l.tlsServer != nil {
-			l.tlsServer.Shutdown(context.Background())
+			l.tlsServer.Shutdown(shutdownCtx)
 		}
 	}()
 

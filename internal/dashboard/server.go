@@ -64,7 +64,9 @@ func (s *Server) Start(ctx context.Context) error {
 	go func() {
 		<-ctx.Done()
 		s.hub.Stop()
-		s.server.Shutdown(context.Background())
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		s.server.Shutdown(shutdownCtx)
 	}()
 
 	log.Printf("dashboard listening on %s", s.cfg.Dashboard.ListenAddr)

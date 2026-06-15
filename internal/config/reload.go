@@ -27,6 +27,10 @@ func Watch(path string, onChange func(*Config)) error {
 						log.Printf("reload config failed: %v", err)
 						continue
 					}
+					if err := cfg.Validate(); err != nil {
+						log.Printf("reload config validation failed: %v", err)
+						continue
+					}
 					onChange(cfg)
 				}
 			case err, ok := <-watcher.Errors:

@@ -25,6 +25,12 @@ func (s *Server) handleSetupStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetupPassword(w http.ResponseWriter, r *http.Request) {
+	// Guard: once setup is done, require authentication
+	setupDone, _ := s.store.GetSetting("setup_done")
+	if setupDone == "true" {
+		http.Error(w, `{"error":"setup already completed"}`, http.StatusForbidden)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Password string `json:"password"`
@@ -49,6 +55,12 @@ func (s *Server) handleSetupPassword(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleSetupApply(w http.ResponseWriter, r *http.Request) {
+	// Guard: once setup is done, require authentication
+	setupDone, _ := s.store.GetSetting("setup_done")
+	if setupDone == "true" {
+		http.Error(w, `{"error":"setup already completed"}`, http.StatusForbidden)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		// Password (optional, may have been set in step 1)
@@ -180,7 +192,7 @@ func (s *Server) writeConfigYAML() error {
 		return fmt.Errorf("marshal config: %w", err)
 	}
 
-	if err := os.WriteFile(s.configPath, data, 0644); err != nil {
+	if err := os.WriteFile(s.configPath, data, 0600); err != nil {
 		return fmt.Errorf("write config file: %w", err)
 	}
 

@@ -28,6 +28,7 @@ type Resolver struct {
 	cache map[string]*cacheEntry
 	ttl   time.Duration
 	client *http.Client
+	done  chan struct{}
 }
 
 func NewResolver() *Resolver {
@@ -35,9 +36,15 @@ func NewResolver() *Resolver {
 		cache:  make(map[string]*cacheEntry),
 		ttl:    24 * time.Hour,
 		client: &http.Client{Timeout: 3 * time.Second},
+		done:   make(chan struct{}),
 	}
 	go r.cleanup()
 	return r
+}
+
+// Stop shuts down the background cleanup goroutine.
+func (r *Resolver) Stop() {
+	close(r.done)
 }
 
 func (r *Resolver) Resolve(ip string) *GeoInfo {
@@ -57,9 +64,13 @@ func (r *Resolver) Resolve(ip string) *GeoInfo {
 	// Query ip-api.com (free, no key needed)
 	info := r.query(ip)
 
-	// Cache result
+	// Cache result — use shorter TTL for failed lookups (empty CountryCode)
+	cacheTTL := r.ttl
+	if info.CountryCode == "" {
+		cacheTTL = 5 * time.Minute
+	}
 	r.mu.Lock()
-	r.cache[ip] = &cacheEntry{info: info, expiry: time.Now().Add(r.ttl)}
+	r.cache[ip] = &cacheEntry{info: info, expiry: time.Now().Add(cacheTTL)}
 	r.mu.Unlock()
 
 	return info
@@ -144,14 +155,20 @@ func isPrivate(ip string) bool {
 
 func (r *Resolver) cleanup() {
 	ticker := time.NewTicker(1 * time.Hour)
-	for range ticker.C {
-		r.mu.Lock()
-		now := time.Now()
-		for k, v := range r.cache {
-			if now.After(v.expiry) {
-				delete(r.cache, k)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-ticker.C:
+			r.mu.Lock()
+			now := time.Now()
+			for k, v := range r.cache {
+				if now.After(v.expiry) {
+					delete(r.cache, k)
+				}
 			}
+			r.mu.Unlock()
 		}
-		r.mu.Unlock()
 	}
 }

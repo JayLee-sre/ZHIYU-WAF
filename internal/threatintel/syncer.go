@@ -50,6 +50,8 @@ func (s *Syncer) Start(interval time.Duration) {
 		s.mu.Unlock()
 		return
 	}
+	// Recreate stopCh in case Stop() was called previously
+	s.stopCh = make(chan struct{})
 	s.running = true
 	s.mu.Unlock()
 

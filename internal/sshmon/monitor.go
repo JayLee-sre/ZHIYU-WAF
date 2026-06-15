@@ -52,6 +52,13 @@ var failedPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`authentication failure.*rhost=(\S+) user=(\S+)`),
 }
 
+var (
+	successIPRe   = regexp.MustCompile(`from (\S+)`)
+	successUserRe = regexp.MustCompile(`for (\S+)`)
+	authIPRe      = regexp.MustCompile(`rhost=(\S+)`)
+	authUserRe    = regexp.MustCompile(`user=(\S+)`)
+)
+
 type ipCounter struct {
 	count    int
 	lastSeen time.Time
@@ -186,6 +193,11 @@ func (m *Monitor) watch() {
 			if err != nil {
 				continue
 			}
+			// Detect log rotation: if file shrunk, reset offset to 0
+			if info.Size() < lastSize {
+				log.Printf("SSH monitor: log file rotated, resetting read offset")
+				lastSize = 0
+			}
 			if info.Size() <= lastSize {
 				continue
 			}
@@ -229,14 +241,12 @@ func (m *Monitor) processLine(line string) {
 			}
 			// Extract from line
 			if ip == "" {
-				ipRe := regexp.MustCompile(`rhost=(\S+)`)
-				if m := ipRe.FindStringSubmatch(line); m != nil {
+				if m := authIPRe.FindStringSubmatch(line); m != nil {
 					ip = m[1]
 				}
 			}
 			if username == "" {
-				userRe := regexp.MustCompile(`user=(\S+)`)
-				if m := userRe.FindStringSubmatch(line); m != nil {
+				if m := authUserRe.FindStringSubmatch(line); m != nil {
 					username = m[1]
 				}
 			}
@@ -255,12 +265,10 @@ func (m *Monitor) processLine(line string) {
 
 	// Check for successful login
 	if strings.Contains(line, "Accepted") {
-		ipRe := regexp.MustCompile(`from (\S+)`)
-		userRe := regexp.MustCompile(`for (\S+)`)
-		if matches := ipRe.FindStringSubmatch(line); matches != nil {
+		if matches := successIPRe.FindStringSubmatch(line); matches != nil {
 			ip := matches[1]
 			username := ""
-			if u := userRe.FindStringSubmatch(line); u != nil {
+			if u := successUserRe.FindStringSubmatch(line); u != nil {
 				username = u[1]
 			}
 			m.recordEvent(ip, username, "success", line)
@@ -271,13 +279,18 @@ func (m *Monitor) processLine(line string) {
 func (m *Monitor) recordFailure(ip, username, message string) {
 	m.mu.Lock()
 
+	now := time.Now()
 	counter, exists := m.ipFails[ip]
 	if !exists {
 		counter = &ipCounter{}
 		m.ipFails[ip] = counter
 	}
+	// Reset counter if last failure was more than 1 hour ago (slow brute force protection)
+	if exists && now.Sub(counter.lastSeen) > 1*time.Hour {
+		counter.count = 0
+	}
 	counter.count++
-	counter.lastSeen = time.Now()
+	counter.lastSeen = now
 
 	region := ""
 	if m.geo != nil {
