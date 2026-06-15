@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"log"
 	"time"
 
 	"zhiyuwaf/internal/model"
@@ -23,11 +24,15 @@ func (s *Store) ListRules() ([]model.Rule, error) {
 			&patternsJSON, &locationsJSON, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
-		json.Unmarshal([]byte(patternsJSON), &r.Patterns)
-		json.Unmarshal([]byte(locationsJSON), &r.MatchLocations)
+		if err := json.Unmarshal([]byte(patternsJSON), &r.Patterns); err != nil {
+			log.Printf("warning: rule %s patterns JSON invalid: %v", r.ID, err)
+		}
+		if err := json.Unmarshal([]byte(locationsJSON), &r.MatchLocations); err != nil {
+			log.Printf("warning: rule %s match_locations JSON invalid: %v", r.ID, err)
+		}
 		rules = append(rules, r)
 	}
-	return rules, nil
+	return rules, rows.Err()
 }
 
 func (s *Store) CreateRule(r model.Rule) error {
@@ -71,7 +76,11 @@ func (s *Store) GetRule(id string) (*model.Rule, error) {
 	if err != nil {
 		return nil, err
 	}
-	json.Unmarshal([]byte(patternsJSON), &r.Patterns)
-	json.Unmarshal([]byte(locationsJSON), &r.MatchLocations)
+	if err := json.Unmarshal([]byte(patternsJSON), &r.Patterns); err != nil {
+		log.Printf("warning: rule %s patterns JSON invalid: %v", r.ID, err)
+	}
+	if err := json.Unmarshal([]byte(locationsJSON), &r.MatchLocations); err != nil {
+		log.Printf("warning: rule %s match_locations JSON invalid: %v", r.ID, err)
+	}
 	return &r, nil
 }

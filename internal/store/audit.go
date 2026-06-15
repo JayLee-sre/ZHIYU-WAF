@@ -63,5 +63,5 @@ func (s *Store) ListAuditEvents(offset, limit int, filter AuditFilter) ([]model.
 		}
 		events = append(events, e)
 	}
-	return events, total, nil
+	return events, total, rows.Err()
 }

@@ -10,6 +10,7 @@ import (
 const zhiYuWAFNATChain = "ZHIYU_WAF_REDIRECT"
 
 type IPTablesManager struct {
+	mu              sync.Mutex
 	proxyPort       int
 	enabled         bool
 	redirectedPorts []int
@@ -25,6 +26,8 @@ func NewIPTablesManager(proxyPort int, enabled bool) *IPTablesManager {
 }
 
 func (m *IPTablesManager) SetTLSEnabled(enabled bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.tlsEnabled = enabled
 }
 
@@ -79,7 +82,12 @@ func (m *IPTablesManager) Cleanup() {
 			return
 		}
 
-		for _, port := range m.redirectedPorts {
+		m.mu.Lock()
+		ports := make([]int, len(m.redirectedPorts))
+		copy(ports, m.redirectedPorts)
+		m.mu.Unlock()
+
+		for _, port := range ports {
 			if err := m.deleteAllRules("iptables", "-t", "nat", "-D", "PREROUTING", "-p", "tcp", "--dport", fmt.Sprintf("%d", port), "-j", zhiYuWAFNATChain); err != nil {
 				log.Printf("failed to remove iptables PREROUTING jump for port %d: %v", port, err)
 			}
@@ -95,6 +103,8 @@ func (m *IPTablesManager) Cleanup() {
 }
 
 func (m *IPTablesManager) rememberRedirectedPort(port int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	for _, p := range m.redirectedPorts {
 		if p == port {
 			return

@@ -24,7 +24,7 @@ func (s *Store) ListUsers() ([]model.User, error) {
 		}
 		users = append(users, u)
 	}
-	return users, nil
+	return users, rows.Err()
 }
 
 func (s *Store) GetUserByUsername(username string) (*model.User, error) {

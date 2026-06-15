@@ -227,7 +227,9 @@ func Load(path string) (*Config, error) {
 // GenerateRandomSecret creates a random 32-byte hex string for JWT signing.
 func GenerateRandomSecret() string {
 	b := make([]byte, 32)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		log.Printf("WARNING: crypto/rand.Read failed: %v, JWT secret may be predictable", err)
+	}
 	return hex.EncodeToString(b)
 }
 

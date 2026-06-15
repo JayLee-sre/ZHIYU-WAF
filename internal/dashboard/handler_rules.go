@@ -109,6 +109,7 @@ func (s *Server) afterRulesChanged(action, id string) {
 // handleTestRule tests a rule pattern against sample input.
 // POST /api/v1/rules/test { "pattern": "...", "text": "..." }
 func (s *Server) handleTestRule(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Pattern string `json:"pattern"`
 		Text    string `json:"text"`
@@ -139,6 +140,7 @@ func (s *Server) handleTestRule(w http.ResponseWriter, r *http.Request) {
 // handleRulePreview tests a full rule config against a sample request.
 // POST /api/v1/rules/preview
 func (s *Server) handleRulePreview(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var req struct {
 		Patterns       []string `json:"patterns"`
 		MatchLocations []string `json:"match_locations"`

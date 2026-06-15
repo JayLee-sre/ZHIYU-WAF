@@ -58,6 +58,7 @@ func (s *Server) handleSyncThreatIntel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateThreatIntelConfig(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var cfg struct {
 		APIKey string `json:"api_key"`
 	}

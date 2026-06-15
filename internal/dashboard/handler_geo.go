@@ -19,6 +19,7 @@ func (s *Server) handleListGeoRules(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAddGeoRule(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	var rule model.GeoRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {
 		http.Error(w, "invalid json", 400)
@@ -31,10 +32,8 @@ func (s *Server) handleAddGeoRule(w http.ResponseWriter, r *http.Request) {
 	if rule.Action == "" {
 		rule.Action = "block"
 	}
-	// Default to enabled for new rules (unless explicitly set to false)
-	if !rule.Enabled {
-		rule.Enabled = true
-	}
+	// Default to enabled for new rules
+	rule.Enabled = true
 	if err := s.store.AddGeoRule(rule); err != nil {
 		http.Error(w, err.Error(), 500)
 		return
@@ -47,6 +46,7 @@ func (s *Server) handleAddGeoRule(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleUpdateGeoRule(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 1<<20)
 	id := chi.URLParam(r, "id")
 	var rule model.GeoRule
 	if err := json.NewDecoder(r.Body).Decode(&rule); err != nil {

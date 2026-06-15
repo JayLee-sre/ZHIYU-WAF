@@ -48,6 +48,7 @@ func (w *WebhookAlerter) Send(alert Alert) error {
 
 	if resp.StatusCode >= 400 {
 		log.Printf("alert webhook returned %d", resp.StatusCode)
+		return fmt.Errorf("webhook returned status %d", resp.StatusCode)
 	}
 	return nil
 }

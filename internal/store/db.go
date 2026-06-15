@@ -185,6 +185,9 @@ func (s *Store) ensureColumns(table string, alters map[string]string) error {
 		}
 		exists[name] = true
 	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
 	for column, stmt := range alters {
 		if !exists[column] {
 			if _, err := s.db.Exec(stmt); err != nil {

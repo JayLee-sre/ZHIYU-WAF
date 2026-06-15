@@ -21,7 +21,7 @@ func (s *Store) ListIPEntries(listType string) ([]model.IPEntry, error) {
 		}
 		entries = append(entries, e)
 	}
-	return entries, nil
+	return entries, dbRows.Err()
 }
 
 func (s *Store) AddIPEntry(e model.IPEntry) error {

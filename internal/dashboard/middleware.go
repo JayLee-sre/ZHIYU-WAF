@@ -88,6 +88,16 @@ func (s *Server) RequireProfessionalFeature(feature string) func(http.Handler) h
 				})
 				return
 			}
+			// Check license expiry
+			if payload.ExpiresAt != "" {
+				if expires, err := time.Parse(time.RFC3339, payload.ExpiresAt); err == nil && time.Now().After(expires) {
+					writeJSON(w, http.StatusForbidden, map[string]string{
+						"code":    "license_expired",
+						"message": "专业版授权已过期，请续期",
+					})
+					return
+				}
+			}
 			// Check if the specific feature is licensed
 			if feature != "" && !licenseHasFeature(payload.Features, feature) {
 				writeJSON(w, http.StatusForbidden, map[string]string{

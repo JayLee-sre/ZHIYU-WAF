@@ -13,6 +13,7 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 	"github.com/google/uuid"
 
+	"zhiyuwaf/internal/geo"
 	"zhiyuwaf/internal/model"
 )
 
@@ -164,6 +165,9 @@ func (s *MySQLStore) migrate() error {
 	if err := s.ensureColumn("sites", "maintenance_mode", "ALTER TABLE sites ADD COLUMN maintenance_mode TINYINT(1) DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := s.ensureColumn("geo_rules", "country_code", "ALTER TABLE geo_rules ADD COLUMN country_code VARCHAR(10) DEFAULT ''"); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -208,10 +212,12 @@ func (s *MySQLStore) ListSettings() (map[string]string, error) {
 	m := make(map[string]string)
 	for rows.Next() {
 		var k, v string
-		rows.Scan(&k, &v)
+		if err := rows.Scan(&k, &v); err != nil {
+			return nil, err
+		}
 		m[k] = v
 	}
-	return m, nil
+	return m, rows.Err()
 }
 
 // --- Attack Logs ---
@@ -742,7 +748,7 @@ func (s *MySQLStore) InitGeoTable() error {
 }
 
 func (s *MySQLStore) ListGeoRules() ([]model.GeoRule, error) {
-	rows, err := s.db.Query("SELECT id, country, action, enabled, created_at FROM geo_rules ORDER BY created_at")
+	rows, err := s.db.Query("SELECT id, COALESCE(country_code,''), country, action, enabled, created_at FROM geo_rules ORDER BY created_at")
 	if err != nil {
 		return nil, err
 	}
@@ -750,12 +756,12 @@ func (s *MySQLStore) ListGeoRules() ([]model.GeoRule, error) {
 	var rules []model.GeoRule
 	for rows.Next() {
 		var r model.GeoRule
-		if err := rows.Scan(&r.ID, &r.Country, &r.Action, &r.Enabled, &r.CreatedAt); err != nil {
+		if err := rows.Scan(&r.ID, &r.CountryCode, &r.Country, &r.Action, &r.Enabled, &r.CreatedAt); err != nil {
 			return nil, err
 		}
 		rules = append(rules, r)
 	}
-	return rules, nil
+	return rules, rows.Err()
 }
 
 func (s *MySQLStore) AddGeoRule(r model.GeoRule) error {
@@ -763,8 +769,8 @@ func (s *MySQLStore) AddGeoRule(r model.GeoRule) error {
 		r.ID = uuid.New().String()
 	}
 	_, err := s.db.Exec(
-		"INSERT INTO geo_rules (id, country, action, enabled, created_at) VALUES (?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE action=VALUES(action), enabled=VALUES(enabled)",
-		r.ID, r.Country, r.Action, r.Enabled, time.Now(),
+		"INSERT INTO geo_rules (id, country_code, country, action, enabled, created_at) VALUES (?, ?, ?, ?, ?, ?) ON DUPLICATE KEY UPDATE action=VALUES(action), enabled=VALUES(enabled), country_code=VALUES(country_code)",
+		r.ID, r.CountryCode, r.Country, r.Action, r.Enabled, time.Now(),
 	)
 	return err
 }
@@ -780,19 +786,22 @@ func (s *MySQLStore) UpdateGeoRule(r model.GeoRule) error {
 	if r.Country != "" {
 		existing.Country = r.Country
 	}
+	if r.CountryCode != "" {
+		existing.CountryCode = r.CountryCode
+	}
 	if r.Action != "" {
 		existing.Action = r.Action
 	}
 	existing.Enabled = r.Enabled
-	_, err = s.db.Exec("UPDATE geo_rules SET country = ?, action = ?, enabled = ? WHERE id = ?",
-		existing.Country, existing.Action, existing.Enabled, r.ID)
+	_, err = s.db.Exec("UPDATE geo_rules SET country_code = ?, country = ?, action = ?, enabled = ? WHERE id = ?",
+		existing.CountryCode, existing.Country, existing.Action, existing.Enabled, r.ID)
 	return err
 }
 
 func (s *MySQLStore) GetGeoRuleByID(id string) (*model.GeoRule, error) {
 	var r model.GeoRule
-	err := s.db.QueryRow("SELECT id, country, action, enabled, created_at FROM geo_rules WHERE id = ?", id).
-		Scan(&r.ID, &r.Country, &r.Action, &r.Enabled, &r.CreatedAt)
+	err := s.db.QueryRow("SELECT id, COALESCE(country_code,''), country, action, enabled, created_at FROM geo_rules WHERE id = ?", id).
+		Scan(&r.ID, &r.CountryCode, &r.Country, &r.Action, &r.Enabled, &r.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -808,20 +817,25 @@ func (s *MySQLStore) RemoveGeoRule(id string) error {
 }
 
 func (s *MySQLStore) GetBlockedCountries() ([]string, error) {
-	rows, err := s.db.Query("SELECT country FROM geo_rules WHERE action = 'block' AND enabled = 1")
+	rows, err := s.db.Query("SELECT COALESCE(country_code,''), country FROM geo_rules WHERE action = 'block' AND enabled = 1")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var countries []string
+	var codes []string
 	for rows.Next() {
-		var c string
-		if err := rows.Scan(&c); err != nil {
+		var code, name string
+		if err := rows.Scan(&code, &name); err != nil {
 			return nil, err
 		}
-		countries = append(countries, c)
+		if code == "" {
+			code = geo.ResolveCode(name)
+		}
+		if code != "" {
+			codes = append(codes, code)
+		}
 	}
-	return countries, nil
+	return codes, rows.Err()
 }
 
 // --- Audit ---

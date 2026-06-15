@@ -7,6 +7,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -17,6 +18,8 @@ import (
 )
 
 const communityDailyAILimit = 50
+
+var aiUsageMu sync.Mutex
 
 // LoadAISettingsFromDB loads persisted AI settings from DB into cfg.
 // Call this on startup before initializing the AI analyzer.
@@ -294,8 +297,10 @@ func (s *Server) GetTodayAIUsage() int {
 	return count
 }
 
-// IncrementAIUsage increments the daily AI call counter.
+// IncrementAIUsage increments the daily AI call counter (thread-safe).
 func (s *Server) IncrementAIUsage() {
+	aiUsageMu.Lock()
+	defer aiUsageMu.Unlock()
 	key := getTodayAIUsageKey()
 	val, _ := s.store.GetSetting(key)
 	var count int
