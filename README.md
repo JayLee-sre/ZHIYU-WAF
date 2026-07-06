@@ -15,8 +15,9 @@
 ![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
 ![License](https://img.shields.io/badge/License-AGPL--3.0-green)
 ![Release](https://img.shields.io/github/v/release/JayLee-sre/ZHIYU-WAF)
+![WeChat](https://img.shields.io/badge/WeChat-cc8c887-07C160?logo=wechat&logoColor=white)
 
-[快速开始](#快速开始) · [功能能力](#功能能力) · [部署方式](#部署方式) · [版本对比](#版本对比) · [Release](https://github.com/JayLee-sre/ZHIYU-WAF/releases)
+[快速开始](#快速开始) · [功能能力](#功能能力) · [部署方式](#部署方式) · [版本对比](#版本对比) · [联系开发者](#联系开发者) · [Release](https://github.com/JayLee-sre/ZHIYU-WAF/releases)
 
 </div>
 
@@ -242,6 +243,12 @@ docker run -d \
 | 商业支持 | - | 支持 |
 
 专业版能力用于需要团队协作、多站管理、情报联动和更完整安全运营闭环的场景。具体开通方式请在管理后台的系统设置中查看。
+
+## 联系开发者
+
+欢迎交流部署、商业授权、私有化交付和功能定制。
+
+![WeChat](https://img.shields.io/badge/微信-cc8c887-07C160?logo=wechat&logoColor=white)
 
 ## 规则目录
 
