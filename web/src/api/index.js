@@ -7,7 +7,14 @@ const api = axios.create({
 })
 
 let redirectingToLogin = false
+let redirectingToSettings = false
 export const TOKEN_KEY = 'zhiyu_waf_token'
+
+const PRO_ERROR_MESSAGES = {
+  professional_required: '此功能需要专业版授权，请在系统设置中激活。',
+  feature_not_licensed: '当前授权不包含此功能，请检查授权范围。',
+  license_unusable: '专业版授权当前不可用，请在系统设置中检查授权状态。',
+}
 
 export function getAuthToken() {
   return localStorage.getItem(TOKEN_KEY) || ''
@@ -41,7 +48,18 @@ api.interceptors.response.use(
       return Promise.reject(err)
     }
 
-    if (err.response?.status === 403 && (err.response?.data?.code === 'professional_required' || err.response?.data?.code === 'feature_not_licensed')) {
+    const code = err.response?.data?.code
+    if (err.response?.status === 403 && PRO_ERROR_MESSAGES[code]) {
+      if (!err.config?.suppressError) {
+        ElMessage.warning(PRO_ERROR_MESSAGES[code])
+      }
+      if (!redirectingToSettings && !window.location.pathname.startsWith('/settings')) {
+        redirectingToSettings = true
+        const reason = encodeURIComponent(code)
+        window.setTimeout(() => {
+          window.location.assign(`/settings?upgrade=${reason}`)
+        }, 600)
+      }
       return Promise.reject(err)
     }
 

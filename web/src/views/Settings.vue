@@ -17,6 +17,16 @@
       </button>
     </div>
 
+    <div v-if="upgradeNotice" class="upgrade-notice">
+      <div class="upgrade-notice-icon">
+        <el-icon :size="18"><Key /></el-icon>
+      </div>
+      <div>
+        <strong>{{ upgradeNotice.title }}</strong>
+        <span>{{ upgradeNotice.desc }}</span>
+      </div>
+    </div>
+
     <!-- 授权面板 (全宽) -->
     <div class="panel license-panel">
       <div class="panel-head">
@@ -238,7 +248,7 @@
       </div>
 
       <!-- 用户管理 -->
-      <div class="panel full-width">
+      <div v-if="isPro" class="panel full-width">
         <div class="panel-head">
           <div class="panel-title-group">
             <div class="panel-icon cyan">
@@ -288,16 +298,29 @@
           </div>
         </div>
       </div>
+
+      <div v-else class="panel full-width user-gate">
+        <div class="user-gate-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        </div>
+        <div>
+          <strong>多用户与 RBAC 属于专业版能力</strong>
+          <span>升级后可创建操作员和只读账号，适合团队协作与审计追踪。</span>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, reactive, inject, onMounted } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import { CircleCheck, Hide, Key, RefreshRight, View, Setting, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
 
+const route = useRoute()
+const router = useRouter()
 const edition = inject('edition', ref('community'))
 const isPro = computed(() => edition.value === 'pro')
 
@@ -325,6 +348,25 @@ const showCreateUser = ref(false)
 const creatingUser = ref(false)
 const newUser = reactive({ username: '', password: '', role: 'operator' })
 const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
+const upgradeNotice = computed(() => {
+  const reason = route.query.upgrade
+  if (!reason) return null
+  const messages = {
+    professional_required: {
+      title: '该功能需要专业版授权',
+      desc: '输入授权码并完成激活后，即可继续使用专业版能力。',
+    },
+    feature_not_licensed: {
+      title: '当前授权未包含该功能',
+      desc: '请检查授权范围，或联系开发者升级授权套餐。',
+    },
+    license_unusable: {
+      title: '授权状态需要处理',
+      desc: '当前授权不可用，请检查机器绑定、到期时间或网络连通性。',
+    },
+  }
+  return messages[reason] || messages.professional_required
+})
 
 const licenseInfo = computed(() => health.value.license || {})
 const licenseStatusText = computed(() => {
@@ -378,7 +420,13 @@ async function activateLicense() {
     ElMessage.success(r.message || '授权已激活')
     edition.value = r.edition === 'pro' ? 'pro' : 'community'
     licenseKey.value = ''
+    if (route.query.upgrade) {
+      router.replace({ path: '/settings' })
+    }
     await loadHealth()
+    if (isPro.value) {
+      await loadUsers()
+    }
   } finally {
     activating.value = false
   }
@@ -501,6 +549,10 @@ function importLabel(key) {
 }
 
 async function loadUsers() {
+  if (!isPro.value) {
+    users.value = []
+    return
+  }
   try { users.value = await api.get('/users') || [] } catch { users.value = [] }
 }
 
@@ -535,7 +587,10 @@ function roleLabel(role) {
   return { admin: '管理员', operator: '操作员', viewer: '只读' }[role] || role
 }
 
-onMounted(() => { loadHealth(); loadUsers() })
+onMounted(async () => {
+  await loadHealth()
+  await loadUsers()
+})
 </script>
 
 <style scoped>
@@ -593,6 +648,38 @@ onMounted(() => { loadHealth(); loadUsers() })
 }
 .btn-outline:hover { border-color: #6366f1; color: #6366f1; }
 .btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
+
+.upgrade-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 16px;
+  border: 1px solid #bfdbfe;
+  border-radius: 12px;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.upgrade-notice-icon {
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #dbeafe;
+}
+.upgrade-notice strong {
+  display: block;
+  font-size: 14px;
+  color: #1e3a8a;
+  margin-bottom: 3px;
+}
+.upgrade-notice span {
+  display: block;
+  font-size: 12.5px;
+  line-height: 1.6;
+}
 
 /* ===== 面板通用 ===== */
 .panel {
@@ -1075,6 +1162,36 @@ onMounted(() => { loadHealth(); loadUsers() })
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 10px;
+}
+.user-gate {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 22px;
+  color: #475569;
+}
+.user-gate-icon {
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  background: #ecfeff;
+  color: #0891b2;
+}
+.user-gate strong {
+  display: block;
+  font-size: 15px;
+  color: #0f172a;
+  margin-bottom: 4px;
+}
+.user-gate span {
+  display: block;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #64748b;
 }
 .user-card {
   display: flex;
