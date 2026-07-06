@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="images/logo.png" alt="智域 WAF" width="104">
+<img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/logo.webp" alt="智域 WAF" width="104">
 
 # 智域 WAF
 
@@ -57,20 +57,20 @@
 
 <table>
 <tr>
-<td width="50%"><img src="images/login.png" alt="登录页面"></td>
-<td width="50%"><img src="images/attack-logs.png" alt="攻击日志"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/login.webp" alt="登录页面"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/attack-logs.webp" alt="攻击日志"></td>
 </tr>
 <tr>
-<td width="50%"><img src="images/rules-engine.png" alt="规则引擎"></td>
-<td width="50%"><img src="images/ssh-monitor.png" alt="SSH 监控"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/rules-engine.webp" alt="规则引擎"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/ssh-monitor.webp" alt="SSH 监控"></td>
 </tr>
 <tr>
-<td width="50%"><img src="images/threat-intel.png" alt="威胁情报"></td>
-<td width="50%"><img src="images/access-control.png" alt="访问控制"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/threat-intel.webp" alt="威胁情报"></td>
+<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/access-control.webp" alt="访问控制"></td>
 </tr>
 </table>
 
-<img src="images/settings.png" alt="系统设置" width="100%">
+<img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@main/images/preview/settings.webp" alt="系统设置" width="100%">
 
 ## 快速开始
 
