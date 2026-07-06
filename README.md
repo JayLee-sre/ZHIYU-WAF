@@ -1,107 +1,58 @@
 <div align="center">
 
-<img src="images/logo.png" alt="智域 WAF" width="100">
-
-<br>
+<img src="images/logo.png" alt="智域 WAF" width="104">
 
 # 智域 WAF
 
-**AI 驱动的新一代 Web 应用防火墙**
+面向中小企业、独立开发者和私有化场景的轻量级 Web 应用防火墙。
 
-轻量 · 高性能 · 开箱即用 — 为中小企业和开发者打造
+把规则防护、访问控制、SSH 暴力破解防护、AI 辅助分析和可视化管理放进一个可自部署的安全网关里。
 
 <br>
 
-<img src="https://img.shields.io/badge/Go-1.25-blue?logo=go&logoColor=white" alt="Go">
-<img src="https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white" alt="Vue 3">
-<img src="https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white" alt="Docker">
-<img src="https://img.shields.io/badge/License-AGPL_v3-green.svg" alt="License">
-<img src="https://img.shields.io/github/stars/JayLee-sre/ZHIYU-WAF?style=social" alt="Stars">
+![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
+![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
+![License](https://img.shields.io/badge/License-AGPL--3.0-green)
+![Release](https://img.shields.io/github/v/release/JayLee-sre/ZHIYU-WAF)
 
-<br><br>
-
-[核心特性](#-核心特性) · [界面预览](#-界面预览) · [快速开始](#-快速开始) · [功能对比](#-功能对比) · [部署指南](#-部署指南)
+[快速开始](#快速开始) · [功能能力](#功能能力) · [部署方式](#部署方式) · [版本对比](#版本对比) · [Release](https://github.com/JayLee-sre/ZHIYU-WAF/releases)
 
 </div>
 
-<br>
-
 ---
 
-##   核心特性
+## 项目定位
 
-<table>
-<tr>
-<td width="50%">
+智域 WAF 不是一个只展示日志的面板，而是一个可以真正接入业务流量的防护代理。
 
-###   AI 智能检测
-接入 OpenAI / Claude / 自定义模型，对请求进行语义级分析，自动学习攻击模式
+它默认通过 `iptables REDIRECT` 接管公网入口流量，将请求转发到 WAF 代理端口，再由规则引擎、速率限制、访问控制、地理封锁、威胁情报和 AI 分析共同判断，最后回源到真实业务服务。
 
-- 异步检测，不阻塞业务请求
-- 5s 超时 + fail-open 保底机制
-- 内置熔断器，AI 异常自动降级
+适合这些场景：
 
-</td>
-<td width="50%">
+- 中小型网站、后台系统、API 服务的边界防护
+- 没有完整安全团队，但需要可视化攻击日志和快速封禁能力的业务
+- 希望私有化部署，不把访问日志交给第三方云 WAF 的团队
+- 需要社区版起步，后续平滑升级专业版能力的产品化场景
 
-###  ️ 规则引擎
-覆盖 SQL 注入、XSS、命令注入、路径穿越等 OWASP Top 10 攻击
+## 功能能力
 
-- 正则 + 模式匹配双引擎
-- 支持自定义规则，热加载生效
-- Log4j / Spring4Shell / Struts2 等高危漏洞
+| 能力 | 说明 |
+| --- | --- |
+| 规则引擎 | 内置 SQL 注入、XSS、命令注入、路径穿越、敏感文件探测等常见 Web 攻击规则 |
+| 速率限制 | 按请求频率和突发流量控制异常访问，降低扫描器和爆破流量影响 |
+| IP 黑白名单 | 管理后台实时维护访问控制列表，防护链路立即生效 |
+| 攻击日志 | 记录命中规则、来源 IP、请求路径、严重等级和处理动作 |
+| SSH 防护 | 监控 SSH 登录失败日志，自动封禁暴力破解来源 |
+| SSL/TLS | 支持自定义证书与 ACME 自动证书能力 |
+| AI 辅助分析 | 可接入 OpenAI 兼容接口，对高风险请求进行语义分析和研判 |
+| 威胁情报 | 同步恶意 IP 情报源，并联动黑名单防护 |
+| 地理封锁 | 按国家或地区封禁访问来源 |
+| 多站点管理 | 支持多站点回源配置，适合一套 WAF 管理多个业务 |
+| 审计日志 | 记录关键管理操作，便于追踪配置变更 |
+| 可视化大屏 | 展示安全态势、攻击趋势和防护效果 |
 
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-###   地理封锁
-基于 ISO 3166-1 国家代码精准匹配，按地区批量封锁
-
-- 200+ 国家/地区支持
-- 中文国名自动解析
-- 实时生效，无需重启
-
-</td>
-<td width="50%">
-
-###   SSH 防护
-实时监控 SSH 登录日志，自动封禁暴力破解 IP
-
-- 可配置最大失败次数
-- 自定义封禁时长
-- 封禁记录可追溯
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-###   威胁情报
-集成多源威胁情报，自动同步恶意 IP 黑名单
-
-- 支持自定义情报源
-- 定时自动同步
-- 与防护引擎联动
-
-</td>
-<td width="50%">
-
-###   SSL/TLS 管理
-ACME 自动签发 Let's Encrypt 证书，到期自动续期
-
-- 零配置 HTTPS
-- HTTP/2 自动协商
-- 自定义证书部署
-
-</td>
-</tr>
-</table>
-
----
-
-##   界面预览
+## 界面预览
 
 <table>
 <tr>
@@ -120,207 +71,232 @@ ACME 自动签发 Let's Encrypt 证书，到期自动续期
 
 <img src="images/settings.png" alt="系统设置" width="100%">
 
----
+## 快速开始
 
-## ⚡ 快速开始
-
-### Docker 一键部署
-
-```bash
-docker compose up -d
-```
-
-访问管理面板：`http://your-server:9090`
-
-### 二进制部署
+### Docker Compose
 
 ```bash
 git clone https://github.com/JayLee-sre/ZHIYU-WAF.git
-cd ZhiYu-WAF
+cd ZHIYU-WAF
 
-# 构建前端
-cd web && npm install && npm run build && cd ..
+docker compose up -d
+```
 
-# 构建后端
-CGO_ENABLED=1 go build -o bin/zhiyu-waf ./cmd/zhiyu-waf
+默认入口：
 
-# 启动（需 root 权限以使用 iptables）
-sudo ./bin/zhiyu-waf -config configs/zhiyu-waf.yaml
+| 服务 | 地址 |
+| --- | --- |
+| 管理后台 | `http://127.0.0.1:9090` |
+| WAF 代理 | `http://127.0.0.1:8080` |
+| 公网入口 | 默认由 `iptables` 将 `80` 转发到 WAF |
+
+首次启动会在日志中输出管理员初始密码：
+
+```bash
+docker logs zhiyu-waf
 ```
 
 ### 一键安装脚本
 
-```bash
-sudo bash scripts/install-zhiyu-waf.sh --backend 127.0.0.1:3000 --public-port 80
-```
-
----
-
-##   功能对比
-
-<table>
-<tr>
-<th width="40%">功能</th>
-<th width="30%" align="center">社区版</th>
-<th width="30%" align="center">专业版</th>
-</tr>
-<tr><td>规则引擎（SQLi / XSS / CMDi 等）</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>速率限制</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>SSL/TLS 自动证书</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>管理仪表盘</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>SSH 暴力破解防护</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>实时日志流</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>备份与恢复</td><td align="center">✅</td><td align="center">✅</td></tr>
-<tr><td>AI 智能检测</td><td align="center">基础</td><td align="center">✅ 高级</td></tr>
-<tr><td>地理封锁</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>威胁情报同步</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>AI 建议规则生成</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>多站点管理</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>高级威胁画像分析</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>多用户 + RBAC</td><td align="center">❌</td><td align="center">✅</td></tr>
-<tr><td>优先技术支持</td><td align="center">❌</td><td align="center">✅</td></tr>
-</table>
-
----
-
-##   系统架构
-
-```
-                        ┌───────────┐
-                        │  Client   │
-                        └─────┬─────┘
-                              │
-                   ┌──────────▼──────────┐
-                   │  iptables REDIRECT   │
-                   │    (80 → 8080)       │
-                   └──────────┬──────────┘
-                              │
-            ┌─────────────────▼─────────────────┐
-            │         ZhiYu-WAF Proxy            │
-            │                                     │
-            │   Stage 1 · Rate Limit              │
-            │   Stage 2 · Rule Engine             │
-            │   Stage 3 · Geo Check               │
-            │   Stage 4 · Threat Intelligence     │
-            │   Stage 5 · AI Analysis             │
-            │                                     │
-            │   ┌──────────┐  ┌──────────────┐    │
-            │   │  Action   │  │  Log/Alert   │    │
-            │   └──────────┘  └──────────────┘    │
-            └─────────────────┬─────────────────┘
-                              │
-                   ┌──────────▼──────────┐
-                   │   Backend Server    │
-                   └─────────────────────┘
-
-            ┌────────────────────────────────┐
-            │     Dashboard (:9090)           │
-            │   Vue 3 + WebSocket + REST API  │
-            └────────────────────────────────┘
-```
-
----
-
-##   部署指南
-
-### 环境要求
-
-| 依赖 | 说明 |
-|------|------|
-| **Go** ≥ 1.21 | 后端编译 |
-| **Node.js** ≥ 18 | 前端构建 |
-| **iptables** | Linux 透明代理 |
-| **gcc** | CGO/sqlite 支持 |
-
-### 端口说明
-
-| 端口 | 用途 |
-|------|------|
-| `80` | 业务入口，iptables 自动转发到 WAF |
-| `8080` | WAF 代理监听 |
-| `9090` | 管理面板 + API |
-| `443` | HTTPS（启用 ACME 后自动开放） |
-
-### Docker 部署
+适合 Linux 服务器直接部署到 `/opt/zhiyu-waf`：
 
 ```bash
-# 开发环境
-docker compose up -d
-
-# 生产环境
-docker run -d \
-  --name zhiyu-waf \
-  --cap-add NET_ADMIN \
-  --network host \
-  -v /your/configs:/opt/zhiyu-waf/configs:ro \
-  -v waf-data:/opt/zhiyu-waf/data \
-  zhiyu-waf:latest
+sudo bash scripts/install-zhiyu-waf.sh \
+  --backend 127.0.0.1:3000 \
+  --public-port 80 \
+  --dashboard-port 9090
 ```
 
----
+常用参数：
 
-## ⚙️ 配置说明
+| 参数 | 说明 |
+| --- | --- |
+| `--backend` | 真实业务服务地址，例如 `127.0.0.1:3000` |
+| `--public-port` | 对外暴露的业务端口，通常是 `80` |
+| `--waf-port` | WAF 代理监听端口，默认 `8080` |
+| `--dashboard-port` | 管理后台端口，默认 `9090` |
+| `--no-iptables` | 不接管公网端口，只启动 WAF 代理 |
+| `--no-firewall` | 不自动修改 firewalld/防火墙规则 |
 
-核心配置文件：`configs/zhiyu-waf.yaml`
+### 源码构建
+
+```bash
+git clone https://github.com/JayLee-sre/ZHIYU-WAF.git
+cd ZHIYU-WAF
+
+make build
+sudo ./bin/zhiyu-waf -config configs/zhiyu-waf.yaml
+```
+
+也可以分开构建：
+
+```bash
+cd web && npm install && npm run build && cd ..
+CGO_ENABLED=1 go build -o bin/zhiyu-waf ./cmd/zhiyu-waf
+```
+
+## 部署方式
+
+### 透明代理模式
+
+推荐生产部署使用该模式。业务访问 `80`，系统将流量转发到 WAF，再由 WAF 回源到真实服务。
+
+```text
+Client
+  |
+  | :80
+  v
+iptables REDIRECT
+  |
+  | :8080
+  v
+ZhiYu-WAF
+  |
+  | backend_addr
+  v
+Your Backend
+```
+
+关键配置：
 
 ```yaml
 proxy:
   listen_addr: ":8080"
-  backend_addr: "127.0.0.1:80"
+  backend_addr: "127.0.0.1:3000"
   iptables_enable: true
-
-dashboard:
-  listen_addr: ":9090"
-  jwt_secret: "change-me"     # 务必修改
-
-ai:
-  enabled: true
-  provider: "openai"
-  async_timeout: 5
-  fail_open: true
-  providers:
-    openai:
-      api_key: "sk-your-key"
-      model: "gpt-4o"
-      base_url: "https://api.openai.com/v1"
-
-ssh:
-  enabled: true
-  max_fails: 5
-  ban_minutes: 30
+  iptables_port: 80
 ```
 
----
+### 反向代理模式
 
-##   开发
+如果你已经有 Nginx、SLB 或云负载均衡，也可以关闭 `iptables`，让上游代理转发到 WAF。
+
+```yaml
+proxy:
+  listen_addr: ":8080"
+  backend_addr: "127.0.0.1:3000"
+  iptables_enable: false
+```
+
+### Docker 生产建议
+
+透明代理需要 host 网络和 `NET_ADMIN` 能力：
 
 ```bash
-make run              # 后端开发
-cd web && npm run dev # 前端热更新
-make test             # 运行测试
-make bench            # 性能基准测试
+docker build -t zhiyu-waf:latest .
+
+docker run -d \
+  --name zhiyu-waf \
+  --restart unless-stopped \
+  --network host \
+  --cap-add NET_ADMIN \
+  -v "$(pwd)/configs:/opt/zhiyu-waf/configs:ro" \
+  -v zhiyu-waf-data:/opt/zhiyu-waf/data \
+  zhiyu-waf:latest
 ```
 
----
+如果不使用透明代理，请关闭 `iptables_enable`，再按你的网络架构映射端口。
 
-##   开源协议
+## 配置说明
 
-本项目采用 [AGPL-3.0](LICENSE) 开源。
+主配置文件位于 [configs/zhiyu-waf.yaml](configs/zhiyu-waf.yaml)。
 
-你可以自由使用、修改和分发，但修改后的代码或通过网络提供服务时，**必须同样开源**。
+| 配置项 | 说明 |
+| --- | --- |
+| `proxy.listen_addr` | WAF 代理监听地址 |
+| `proxy.backend_addr` | 真实业务回源地址 |
+| `proxy.iptables_enable` | 是否启用本机端口接管 |
+| `dashboard.listen_addr` | 管理后台监听地址 |
+| `dashboard.jwt_secret` | 后台登录令牌密钥，生产环境必须修改 |
+| `dashboard.cors_origins` | 管理后台允许的访问来源 |
+| `engine.rules_dir` | 检测规则目录 |
+| `storage.path` | SQLite 数据文件路径 |
+| `ai.enabled` | 是否启用 AI 辅助分析 |
 
----
+生产环境建议：
 
-<div align="center">
+- 修改 `dashboard.jwt_secret`
+- 将 `dashboard.cors_origins` 改成实际后台域名
+- 限制 `9090` 管理端口的公网访问
+- 为 `data/` 做定期备份
+- 启用 HTTPS 或通过上游网关终止 TLS
+- 先在观察模式或测试流量中验证规则，再接入核心业务
 
-**如果这个项目对你有帮助，请给一个 ⭐ Star 支持我们！**
+## 版本对比
 
-<br>
+| 功能 | 社区版 | 专业版 |
+| --- | :---: | :---: |
+| 规则引擎 | 支持 | 支持 |
+| 速率限制 | 支持 | 支持 |
+| 攻击日志 | 支持 | 支持 |
+| IP 黑白名单 | 支持 | 支持 |
+| SSH 暴力破解防护 | 支持 | 支持 |
+| SSL/TLS 管理 | 支持 | 支持 |
+| 审计日志 | 支持 | 支持 |
+| AI 辅助分析 | 基础能力 | 高级能力 |
+| 地理封锁 | - | 支持 |
+| 威胁情报同步 | - | 支持 |
+| 多站点管理 | - | 支持 |
+| 多用户与 RBAC | - | 支持 |
+| 安全态势大屏 | - | 支持 |
+| 商业支持 | - | 支持 |
 
-[![Star History Chart](https://api.star-history.com/svg?repos=JayLee-sre/ZHIYU-WAF&type=Date)](https://star-history.com/#JayLee-sre/ZHIYU-WAF&Date)
+专业版能力用于需要团队协作、多站管理、情报联动和更完整安全运营闭环的场景。具体开通方式请在管理后台的系统设置中查看。
 
-<br>
+## 规则目录
 
-Made with ❤️ by 小睿科技
+默认规则位于 [configs/rules](configs/rules)：
 
-</div>
+| 文件 | 说明 |
+| --- | --- |
+| `sqli.yaml` | SQL 注入检测 |
+| `xss.yaml` | XSS 检测 |
+| `cmdi.yaml` | 命令注入检测 |
+| `traversal.yaml` | 路径穿越检测 |
+| `sensitive.yaml` | 敏感文件与路径检测 |
+| `enterprise.yaml` | 企业级增强规则 |
+
+修改规则后，可通过管理后台或重启服务使配置生效。
+
+## 开发
+
+后端：
+
+```bash
+go test ./...
+go run ./cmd/zhiyu-waf -config configs/zhiyu-waf.yaml
+```
+
+前端：
+
+```bash
+cd web
+npm install
+npm run dev
+```
+
+完整构建：
+
+```bash
+make build
+```
+
+## Release
+
+最新版本请查看 [GitHub Releases](https://github.com/JayLee-sre/ZHIYU-WAF/releases)。
+
+当前正式版本：
+
+- [v1.0.0](https://github.com/JayLee-sre/ZHIYU-WAF/releases/tag/v1.0.0)
+
+## 许可证
+
+本项目采用 [AGPL-3.0](LICENSE) 协议发布。
+
+如果你计划在商业产品、SaaS 服务、私有化交付或闭源环境中使用，请先确认 AGPL-3.0 的网络服务开源义务，并根据实际场景选择合适的授权方式。
+
+## 免责声明
+
+WAF 是防御体系的一部分，不应替代应用自身的安全开发、依赖治理、身份认证、权限控制和漏洞修复。
+
+在生产环境接入前，请务必完成规则验证、回源连通性检查、误报评估和回滚预案。
