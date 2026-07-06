@@ -5,9 +5,6 @@ services:
     build: .
     container_name: zhiyu-waf
     restart: unless-stopped
-    ports:
-      - "8080:8080"   # WAF proxy
-      - "9090:9090"   # Dashboard
     volumes:
       - waf-data:/opt/zhiyu-waf/data
       - ./configs:/opt/zhiyu-waf/configs:ro
@@ -17,7 +14,7 @@ services:
       - ZHIYU_WAF_OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
     cap_add:
       - NET_ADMIN     # Required for iptables
-    network_mode: host  # Required for iptables REDIRECT
+    network_mode: host  # Required for transparent iptables REDIRECT; ports are exposed on host directly
 
 volumes:
   waf-data:

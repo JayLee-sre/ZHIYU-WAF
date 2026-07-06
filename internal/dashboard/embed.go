@@ -3,6 +3,7 @@ package dashboard
 import (
 	"embed"
 	"io/fs"
+	"strings"
 )
 
 // Embedded frontend files. During build, copy web/dist → internal/dashboard/dist
@@ -20,6 +21,10 @@ func FrontendSubFS() fs.FS {
 	}
 	// Check for real content (not just a placeholder)
 	if _, err := sub.Open("favicon.png"); err != nil {
+		return nil
+	}
+	index, err := fs.ReadFile(sub, "index.html")
+	if err != nil || strings.Contains(string(index), "placeholder") {
 		return nil
 	}
 	return sub

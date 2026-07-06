@@ -125,7 +125,7 @@ const menuItems = [
   { path: '/ssh-logs', label: 'SSH 监控', desc: '暴力破解防护', icon: Key, color: 'amber' },
   { path: '/rules', label: '规则引擎', desc: '检测规则管理', icon: SetUp, color: 'amber' },
   { path: '/iplist', label: '访问控制', desc: 'IP 黑白名单', icon: Filter, color: 'cyan' },
-  { path: '/threatintel', label: '威胁情报', desc: '自动恶意IP同步', icon: Warning, color: 'rose' },
+  { path: '/threatintel', label: '威胁情报', desc: '自动恶意IP同步', icon: Warning, color: 'rose', pro: true },
   { path: '/audit', label: '审计日志', desc: '操作记录追踪', icon: List, color: 'cyan' },
   { path: '/certs', label: 'SSL 证书', desc: 'TLS 证书管理', icon: Lock, color: 'green' },
   { path: '/settings', label: '系统设置', desc: '授权与安全配置', icon: Setting, color: 'slate' },

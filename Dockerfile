@@ -28,7 +28,8 @@ COPY configs/ configs/
 
 RUN mkdir -p data certs && chown -R zhiyuwaf:zhiyuwaf /opt/zhiyu-waf
 
-USER zhiyuwaf
+# Transparent iptables REDIRECT needs root in the default container runtime.
+# Disable iptables or provide equivalent capabilities before dropping privileges.
 EXPOSE 8080 9090
 
 VOLUME ["/opt/zhiyu-waf/data"]

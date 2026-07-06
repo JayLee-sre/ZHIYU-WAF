@@ -1,7 +1,9 @@
 .PHONY: build backend run clean test test-integration bench frontend frontend-dev all deps
 
 backend:
-	cp -r web/dist internal/dashboard/dist
+	rm -rf internal/dashboard/dist
+	mkdir -p internal/dashboard
+	cp -R web/dist internal/dashboard/dist
 	go build -o bin/zhiyu-waf ./cmd/zhiyu-waf
 
 frontend:
