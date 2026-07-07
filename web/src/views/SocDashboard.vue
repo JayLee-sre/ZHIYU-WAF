@@ -1,16 +1,12 @@
 <template>
-  <!-- 非专业版 -->
-  <div class="pro-gate" v-if="!isPro">
-    <div class="gate-card">
-      <div class="gate-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <h2>专业版功能</h2>
-      <p>监控大屏是专业版专属功能，升级后即可使用安全态势可视化大屏。</p>
-      <router-link to="/settings" class="gate-btn">升级专业版</router-link>
-      <router-link to="/dashboard" class="gate-back">返回管理面板</router-link>
-    </div>
-  </div>
+  <ProFeatureGate
+    v-if="!isPro"
+    fullscreen
+    title="安全态势监控大屏"
+    description="面向值守场景的大屏视图，聚合攻击趋势、来源分布、规则命中和实时轨迹。"
+    feature-key="soc"
+    :features="['全屏态势展示', '实时攻击趋势', '来源与规则聚合']"
+  />
 
   <!-- 专业版大屏 -->
   <div class="soc" v-else>
@@ -114,13 +110,14 @@
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, inject } from 'vue'
 import * as echarts from 'echarts'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const isPro = inject('isPro', ref(false))
 
 const stats = ref({}), healthData = ref({}), sshStats = ref({}), threatInfo = ref({})
 const ruleCount = ref(0), currentTime = ref('')
 
-let clk
+let clk, refreshTimer
 function tick() { currentTime.value = new Date().toLocaleString('zh-CN', { hour12: false }) }
 
 const kpiCards = computed(() => {
@@ -275,6 +272,7 @@ function cCoord(r){
 }
 
 async function loadAll(){
+  if (!isPro.value) return
   const[st,h,ssh,ti,rl]=await Promise.allSettled([
     api.get('/stats'),api.get('/health'),api.get('/ssh/stats'),api.get('/threatintel/status'),api.get('/rules')])
   if(st.status==='fulfilled')stats.value=st.value||{}
@@ -284,33 +282,28 @@ async function loadAll(){
   if(rl.status==='fulfilled')ruleCount.value=Array.isArray(rl.value)?rl.value.length:0
 }
 
-onMounted(async()=>{
-  tick(); clk=setInterval(tick,1000)
+async function startDashboard() {
+  if (!isPro.value) return
   await loadAll(); await loadMaps(); await nextTick()
   initSev(); initSrc(); initW(); initC(); initTrend()
   ro=new ResizeObserver(()=>{sevC?.resize();srcC?.resize();wC?.resize();cC?.resize();trC?.resize()})
   ;[sevRef,srcRef,wRef,cRef,trRef].forEach(r=>{if(r.value)ro.observe(r.value)})
-  setInterval(loadAll,30000)
+  refreshTimer = setInterval(loadAll,30000)
+}
+
+onMounted(async()=>{
+  tick(); clk=setInterval(tick,1000)
+  await startDashboard()
 })
+watch(isPro, (value) => { if (value && !refreshTimer) startDashboard() })
 watch(()=>stats.value.by_severity,()=>updSev(),{deep:true})
 watch(()=>stats.value.by_source,()=>updSrc(),{deep:true})
 watch(wRegs,()=>updW(),{deep:true})
 watch(cRegs,()=>updC(),{deep:true})
-onBeforeUnmount(()=>{clearInterval(clk);ro?.disconnect();[sevC,srcC,wC,cC,trC].forEach(c=>c?.dispose())})
+onBeforeUnmount(()=>{clearInterval(clk);clearInterval(refreshTimer);ro?.disconnect();[sevC,srcC,wC,cC,trC].forEach(c=>c?.dispose())})
 </script>
 
 <style scoped>
-/* Pro Gate */
-.pro-gate{min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f4f6fb}
-.gate-card{text-align:center;background:#fff;border:1px solid #e8ecf1;border-radius:20px;padding:48px 40px;max-width:400px;box-shadow:0 4px 6px -1px rgba(0,0,0,0.04),0 20px 50px -12px rgba(0,0,0,0.06)}
-.gate-icon{width:72px;height:72px;border-radius:18px;background:#eef2ff;color:#6366f1;display:flex;align-items:center;justify-content:center;margin:0 auto 20px}
-.gate-card h2{font-size:22px;font-weight:800;color:#0f172a;margin:0 0 8px}
-.gate-card p{font-size:13px;color:#94a3b8;line-height:1.6;margin:0 0 24px}
-.gate-btn{display:inline-block;padding:10px 32px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#4f46e5);color:#fff;font-size:14px;font-weight:700;text-decoration:none;transition:all .2s}
-.gate-btn:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(99,102,241,0.3)}
-.gate-back{display:block;margin-top:14px;font-size:13px;color:#94a3b8;text-decoration:none}
-.gate-back:hover{color:#6366f1}
-
 .soc{height:100vh;display:flex;flex-direction:column;background:#f4f6fb;font-family:'Inter',-apple-system,'Microsoft YaHei',sans-serif;color:#1e293b;overflow:hidden}
 
 /* Topbar */

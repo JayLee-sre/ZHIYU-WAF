@@ -10,32 +10,30 @@ const distDir = path.join(__dirname, 'dist', 'assets')
 
 const obfuscationOptions = {
   compact: true,
-  controlFlowFlattening: true,
-  controlFlowFlatteningThreshold: 0.5,
-  deadCodeInjection: true,
-  deadCodeInjectionThreshold: 0.2,
+  controlFlowFlattening: false,
+  deadCodeInjection: false,
   debugProtection: false,
   debugProtectionInterval: 0,
   disableConsoleOutput: false,
   identifierNamesGenerator: 'hexadecimal',
   log: false,
-  numbersToExpressions: true,
+  numbersToExpressions: false,
   renameGlobals: false,
   selfDefending: false,
   simplify: true,
   splitStrings: true,
   splitStringsChunkLength: 15,
   stringArray: true,
-  stringArrayEncoding: ['rc4'],
+  stringArrayEncoding: [],
   stringArrayIndexShift: true,
   stringArrayRotate: true,
   stringArrayShuffle: true,
   stringArrayWrappersCount: 1,
-  stringArrayWrappersChainedCalls: true,
+  stringArrayWrappersChainedCalls: false,
   stringArrayWrappersParametersMaxCount: 2,
   stringArrayWrappersType: 'function',
-  stringArrayThreshold: 0.75,
-  transformObjectKeys: true,
+  stringArrayThreshold: 0.35,
+  transformObjectKeys: false,
   unicodeEscapeSequence: false,
 }
 
@@ -45,6 +43,13 @@ function obfuscateFile(filePath) {
   fs.writeFileSync(filePath, result.getObfuscatedCode(), 'utf-8')
 }
 
+function shouldObfuscate(fileName) {
+  // Keep Vue runtime, app bootstrap, and heavy vendor chunks stable and fast.
+  // Business route chunks remain obfuscated.
+  if (/^(index|echarts|vue|element|vendor|rolldown-runtime)-.*\.js$/.test(fileName)) return false
+  return true
+}
+
 function main() {
   if (!fs.existsSync(distDir)) {
     console.error('dist/assets not found, run vite build first')
@@ -52,9 +57,17 @@ function main() {
   }
 
   const files = fs.readdirSync(distDir).filter(f => f.endsWith('.js'))
-  console.log(`Obfuscating ${files.length} JS files...`)
+  const targets = files.filter((file) => {
+    if (!shouldObfuscate(file)) return false
+    return fs.statSync(path.join(distDir, file)).size <= 180 * 1024
+  })
+  const skipped = files.filter(f => !targets.includes(f))
+  console.log(`Obfuscating ${targets.length} JS files...`)
+  if (skipped.length) {
+    console.log(`Skipping runtime/vendor chunks: ${skipped.join(', ')}`)
+  }
 
-  for (const file of files) {
+  for (const file of targets) {
     const filePath = path.join(distDir, file)
     const before = fs.statSync(filePath).size
     obfuscateFile(filePath)
@@ -62,7 +75,7 @@ function main() {
     console.log(`  ✓ ${file} (${(before / 1024).toFixed(0)}KB → ${(after / 1024).toFixed(0)}KB)`)
   }
 
-  console.log(`Done. ${files.length} files obfuscated.`)
+  console.log(`Done. ${targets.length} files obfuscated, ${skipped.length} skipped.`)
 }
 
 main()

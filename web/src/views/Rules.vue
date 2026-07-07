@@ -13,7 +13,7 @@
       </button>
     </div>
 
-    <div class="table-card">
+    <div class="table-card" v-if="rules.length || loading">
       <table class="data-table">
         <thead>
           <tr>
@@ -45,15 +45,17 @@
               <button class="action-btn delete" @click="del(r.id)">删除</button>
             </td>
           </tr>
-          <tr v-if="rules.length === 0 && !loading">
-            <td colspan="7" class="empty-state">
-              <div class="empty-icon"><el-icon :size="32"><SetUp /></el-icon></div>
-              <div class="empty-text">暂无自定义规则</div>
-              <div class="empty-desc">系统已加载内置规则，可在此添加自定义检测规则</div>
-            </td>
-          </tr>
         </tbody>
       </table>
+    </div>
+
+    <div class="empty-panel" v-else>
+      <div class="empty-icon"><el-icon :size="30"><SetUp /></el-icon></div>
+      <div class="empty-title">暂无自定义规则</div>
+      <div class="empty-desc">系统已加载内置规则。你可以新增自定义检测规则，用于覆盖业务中特有的攻击特征。</div>
+      <button class="btn-primary" @click="openCreate">
+        <el-icon :size="14"><Plus /></el-icon> 新建规则
+      </button>
     </div>
 
     <!-- 弹窗 -->
@@ -254,7 +256,13 @@ onMounted(load)
   .action-cell { display: flex !important; grid-template-columns: none !important; gap: 8px; }
   .action-cell::before { flex: 0 0 72px; }
   .action-btn { flex: 1; padding: 8px 10px; }
-  .empty-state { display: block !important; }
+  .empty-state {
+    display: block !important;
+    width: 100%;
+    min-height: 220px;
+    padding: 48px 18px !important;
+    text-align: center;
+  }
   .empty-state::before { content: none !important; }
   .modal-overlay { align-items: flex-end; padding: 0; }
   .modal-card { width: 100vw; max-width: 100vw; max-height: 92vh; border-radius: 16px 16px 0 0; }

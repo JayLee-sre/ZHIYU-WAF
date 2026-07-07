@@ -99,7 +99,7 @@
     </div>
 
     <!-- 事件表 -->
-    <div class="table-card">
+    <div class="table-card" v-if="events.length || loading">
       <div class="table-header">
         <span class="table-title">SSH 事件日志</span>
         <span class="table-count">{{ total }} 条记录</span>
@@ -128,15 +128,6 @@
             </td>
             <td class="msg-cell" :title="ev.message">{{ ev.message }}</td>
           </tr>
-          <tr v-if="events.length === 0 && !loading">
-            <td colspan="6" class="empty-state">
-              <div class="empty-icon">
-                <el-icon :size="32"><Monitor /></el-icon>
-              </div>
-              <div class="empty-text">暂无 SSH 事件</div>
-              <div class="empty-desc">SSH 监控未启用或暂无记录</div>
-            </td>
-          </tr>
         </tbody>
       </table>
 
@@ -156,6 +147,15 @@
           <button class="page-btn" :disabled="page >= totalPages" @click="page=totalPages; loadEvents()">末页</button>
         </div>
       </div>
+    </div>
+
+    <div class="empty-panel" v-else>
+      <div class="empty-icon">
+        <el-icon :size="30"><Monitor /></el-icon>
+      </div>
+      <div class="empty-title">暂无 SSH 事件</div>
+      <div class="empty-desc">当前没有 SSH 登录事件。若已启用 SSH 监控，新的失败、封禁和成功登录记录会展示在这里。</div>
+      <button class="btn-ghost" @click="resetFilter">重置筛选</button>
     </div>
   </div>
 </template>

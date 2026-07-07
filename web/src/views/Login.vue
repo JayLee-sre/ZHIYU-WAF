@@ -62,7 +62,7 @@
               <span>我已阅读并同意<a href="/agreement.html" target="_blank" rel="noopener" @click.stop>用户协议</a>和<a href="/privacy.html" target="_blank" rel="noopener" @click.stop>隐私政策</a></span>
             </div>
 
-            <el-button type="primary" size="large" :loading="loading" :disabled="!form.acceptedTerms" class="login-btn" @click="handleLogin">
+            <el-button type="primary" size="large" native-type="submit" :loading="loading" :disabled="!form.acceptedTerms" class="login-btn" @click="handleLogin">
               {{ loading ? '验证中...' : '登 录' }}
             </el-button>
           </el-form>
@@ -81,12 +81,10 @@
 
 <script setup>
 import { ref, reactive } from 'vue'
-import { useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { User, Lock } from '@element-plus/icons-vue'
 import api, { setAuthToken } from '../api'
 
-const router = useRouter()
 const formRef = ref()
 const loading = ref(false)
 const form = reactive({ username: '', password: '', acceptedTerms: false })
@@ -96,11 +94,16 @@ const rules = {
 }
 
 async function handleLogin() {
+  if (loading.value) return
   if (!form.acceptedTerms) {
     ElMessage.warning('请先阅读并勾选同意用户协议和隐私政策')
     return
   }
-  await formRef.value.validate()
+  try {
+    await formRef.value.validate()
+  } catch {
+    return
+  }
   loading.value = true
   try {
     const { username, password } = form
@@ -111,13 +114,24 @@ async function handleLogin() {
     try {
       const status = await api.get('/setup/status', { suppressError: true })
       if (status?.needed) {
-        router.push('/setup')
+        window.location.replace('/setup')
         return
       }
     } catch {}
-    router.push('/dashboard')
-  } catch {
-    ElMessage.error('用户名或密码错误')
+    window.location.replace('/dashboard')
+  } catch (err) {
+    const status = err.response?.status
+    const message = err.response?.data?.error
+    const displayMessage = err.response?.data?.message
+    if (status === 429) {
+      const retryAfter = Number(err.response?.data?.retry_after_seconds || err.response?.headers?.['retry-after'] || 0)
+      const minutes = Math.max(1, Math.ceil(retryAfter / 60))
+      ElMessage.error(`${displayMessage || '登录失败次数过多，请稍后再试'}，约 ${minutes} 分钟后可重试`)
+    } else if (message) {
+      ElMessage.error(message)
+    } else {
+      ElMessage.error('登录失败，请检查网络或刷新页面后重试')
+    }
   } finally {
     loading.value = false
   }

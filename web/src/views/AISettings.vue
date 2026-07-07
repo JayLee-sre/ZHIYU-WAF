@@ -1,21 +1,11 @@
 <template>
-  <!-- 专业版引导 -->
-  <div class="pro-gate" v-if="!isPro">
-    <div class="gate-card">
-      <div class="gate-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <h2>专业版功能</h2>
-      <p>AI 智能检测引擎是专业版专属功能，支持接入任意 OpenAI 兼容模型实现智能攻击分析，升级后即可使用。</p>
-      <div class="gate-features">
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> AI 驱动的智能攻击检测</div>
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> 支持任意 OpenAI 兼容模型</div>
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> 误报学习与规则自动沉淀</div>
-      </div>
-      <router-link to="/settings" class="gate-btn">升级专业版</router-link>
-      <router-link to="/dashboard" class="gate-back">返回管理面板</router-link>
-    </div>
-  </div>
+  <ProFeatureGate
+    v-if="!isPro"
+    title="AI 智能检测引擎"
+    description="接入 OpenAI 兼容模型，对规则未命中的请求进行二次分析，并将高价值样本沉淀为可复用规则。"
+    feature-key="ai"
+    :features="['AI 驱动攻击检测', 'OpenAI 兼容模型', '误报学习与规则沉淀']"
+  />
 
   <div class="ai-page" v-else>
     <!-- 头部 -->
@@ -288,6 +278,7 @@ import { useRouter } from 'vue-router'
 import { Cpu, Connection, View, Hide, SetUp, Warning, DataAnalysis } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const isPro = inject('isPro', ref(false))
 const router = useRouter()
@@ -443,12 +434,11 @@ function siteName(item) { return item?.site_name || item?.domain || '默认站�
 function fmt(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '-' }
 
 function loadAll() {
+  if (!isPro.value) return
   load()
   loadUsage()
-  if (isPro.value) {
-    loadAIInsight()
-    loadAIHits()
-  }
+  loadAIInsight()
+  loadAIHits()
 }
 
 watch(isPro, () => loadAll(), { immediate: true })
@@ -456,34 +446,6 @@ watch(isPro, () => loadAll(), { immediate: true })
 
 <style scoped>
 .ai-page { }
-
-/* Pro Gate */
-.pro-gate { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
-.gate-card {
-  text-align: center; max-width: 420px; padding: 48px 40px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 20px;
-  box-shadow: 0 4px 24px rgba(0,0,0,.06);
-}
-.gate-icon { margin-bottom: 20px; color: #d97706; }
-.gate-card h2 { font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; }
-.gate-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px; }
-.gate-features { text-align: left; margin-bottom: 24px; }
-.gate-feat {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 0; font-size: 13px; color: var(--text-secondary); font-weight: 500;
-}
-.gate-feat svg { color: #059669; flex-shrink: 0; }
-.gate-btn {
-  display: inline-block; padding: 10px 28px; border-radius: 10px;
-  background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
-  text-decoration: none; transition: all 0.2s;
-}
-.gate-btn:hover { background: var(--primary-hover); }
-.gate-back {
-  display: block; margin-top: 12px; font-size: 13px; color: var(--text-muted);
-  text-decoration: none;
-}
-.gate-back:hover { color: var(--primary); }
 
 /* Header */
 .ai-header {

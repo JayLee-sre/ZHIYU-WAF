@@ -14,7 +14,7 @@
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-group">
-        <div class="filter-item">
+        <div class="filter-item" v-if="isPro">
           <label>站点范围</label>
           <select v-model="filters.site_id" class="filter-select site-select" @change="page = 1; loadLogs()">
             <option value="">全部站点</option>
@@ -55,7 +55,7 @@
     </div>
 
     <!-- 数据表 -->
-    <div class="table-card">
+    <div class="table-card" v-if="logs.length || loading">
       <div class="table-header">
         <span class="table-title">攻击日志</span>
         <span class="table-count">{{ total }} 条记录</span>
@@ -98,15 +98,6 @@
             <td><span class="severity-pill" :class="log.severity">{{ sevTxt(log.severity) }}</span></td>
             <td><span class="detail-link">详情</span></td>
           </tr>
-          <tr v-if="logs.length === 0 && !loading">
-            <td colspan="10" class="empty-state">
-              <div class="empty-icon">
-                <el-icon :size="32"><Document /></el-icon>
-              </div>
-              <div class="empty-text">暂无攻击记录</div>
-              <div class="empty-desc">系统未检测到任何攻击行为</div>
-            </td>
-          </tr>
         </tbody>
       </table>
 
@@ -132,6 +123,15 @@
           <button class="page-btn" :disabled="page >= totalPages" @click="page = totalPages; loadLogs()">末页</button>
         </div>
       </div>
+    </div>
+
+    <div class="empty-panel" v-else>
+      <div class="empty-icon">
+        <el-icon :size="30"><Document /></el-icon>
+      </div>
+      <div class="empty-title">暂无攻击记录</div>
+      <div class="empty-desc">当前筛选条件下没有检测到攻击事件。可以调整筛选条件，或等待新的访问流量进入 WAF。</div>
+      <button class="btn-ghost" @click="resetFilters">重置筛选</button>
     </div>
 
     <!-- 详情弹窗 -->
@@ -225,12 +225,13 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed, onMounted, inject, watch } from 'vue'
 import { Search, Document, Cpu, Close } from '@element-plus/icons-vue'
 import api from '../api'
 import { ElMessage, ElMessageBox } from 'element-plus'
 
 const logs = ref([]), total = ref(0), page = ref(1), pageSize = ref(20), jumpPage = ref(1)
+const isPro = inject('isPro', ref(false))
 const loading = ref(false), detailVisible = ref(false), d = ref(null)
 const sites = ref([])
 const helpKey = ref('')
@@ -256,6 +257,11 @@ function detectionExplain(log) {
 }
 
 async function loadSites() {
+  if (!isPro.value) {
+    sites.value = []
+    filters.site_id = ''
+    return
+  }
   try { sites.value = await api.get('/sites') || [] } catch {}
 }
 
@@ -298,6 +304,14 @@ async function markFalsePositive() {
     loadLogs()
   } catch {}
 }
+watch(isPro, (value) => {
+  if (value) loadSites()
+  else {
+    sites.value = []
+    filters.site_id = ''
+  }
+})
+
 onMounted(() => { loadSites(); loadLogs() })
 </script>
 

@@ -11,23 +11,14 @@
       <button class="btn-primary" :disabled="!isPro" @click="openCreate">新增站点</button>
     </div>
 
-    <div class="upgrade-panel" v-if="!isPro">
-      <div class="upgrade-copy">
-        <span class="upgrade-kicker">专业版能力</span>
-        <h3>多站点统一接入与独立防护</h3>
-        <p>适合一台服务器承载官网、后台、API、上传服务等多个业务入口，为不同域名配置独立回源、AI 检测和挑战策略。</p>
-        <div class="upgrade-features">
-          <span>多域名回源</span>
-          <span>泛域名匹配</span>
-          <span>站点级策略</span>
-          <span>按站点审计</span>
-        </div>
-      </div>
-      <div class="upgrade-actions">
-        <button class="btn-primary" @click="goSettings">前往授权</button>
-        <span>激活后即可配置多站代理</span>
-      </div>
-    </div>
+    <ProFeatureGate
+      v-if="!isPro"
+      compact
+      title="多站点统一接入与独立防护"
+      description="适合一台服务器承载官网、后台、API、上传服务等多个业务入口，为不同域名配置独立回源和防护策略。"
+      feature-key="sites"
+      :features="['多域名回源', '泛域名匹配', '站点级策略', '按站点审计']"
+    />
 
     <template v-else>
       <div class="stats-grid">
@@ -52,7 +43,7 @@
         </div>
       </div>
 
-      <div class="table-card">
+      <div class="table-card" v-if="filteredSites.length || loading">
         <div class="table-head">
           <div>
             <div class="table-title">站点列表</div>
@@ -108,11 +99,20 @@
                 <button class="btn-danger" @click="removeSite(site)">删除</button>
               </td>
             </tr>
-            <tr v-if="!filteredSites.length && !loading">
-              <td colspan="7" class="empty">{{ isPro ? '暂无匹配站点' : '当前版本未启用站点数据' }}</td>
-            </tr>
           </tbody>
         </table>
+      </div>
+
+      <div class="empty-panel" v-else>
+        <div class="empty-icon">
+          <el-icon :size="30"><Connection /></el-icon>
+        </div>
+        <div class="empty-title">{{ hasSiteFilter ? '暂无匹配站点' : '暂无站点' }}</div>
+        <div class="empty-desc">
+          {{ hasSiteFilter ? '当前筛选条件下没有找到站点，可以清空搜索条件后再查看。' : '添加业务站点后，WAF 会按 Host 匹配独立回源和站点级防护策略。' }}
+        </div>
+        <button class="btn-primary" v-if="!hasSiteFilter" @click="openCreate">新增站点</button>
+        <button class="btn-ghost" v-else @click="clearSiteFilter">清空筛选</button>
       </div>
     </template>
 
@@ -158,13 +158,12 @@
 
 <script setup>
 import { computed, inject, onMounted, reactive, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { Connection } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const sites = ref([])
-const router = useRouter()
 const isPro = inject('isPro', ref(false))
 const loading = ref(false)
 const saving = ref(false)
@@ -178,6 +177,7 @@ const form = reactive(defaultForm())
 const enabledCount = computed(() => sites.value.filter(s => s.enabled).length)
 const maintenanceCount = computed(() => sites.value.filter(s => s.maintenance_mode).length)
 const aiCount = computed(() => sites.value.filter(s => s.ai_enabled).length)
+const hasSiteFilter = computed(() => !!keyword.value || !!typeFilter.value)
 const filteredSites = computed(() => {
   const kw = keyword.value.toLowerCase()
   return sites.value.filter((site) => {
@@ -208,8 +208,9 @@ function openCreate() {
   showDlg.value = true
 }
 
-function goSettings() {
-  router.push('/settings')
+function clearSiteFilter() {
+  keyword.value = ''
+  typeFilter.value = ''
 }
 
 function openEdit(site) {
@@ -304,25 +305,6 @@ onMounted(() => { if (isPro.value) loadSites() })
   padding: 7px 10px;
 }
 .btn-emergency:hover { border-color: #fb923c; background: #ffedd5; }
-.upgrade-panel {
-  display: flex; align-items: center; justify-content: space-between; gap: 24px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-card);
-  padding: 28px; box-shadow: 0 1px 3px rgba(0,0,0,.04);
-}
-.upgrade-kicker {
-  display: inline-flex; margin-bottom: 10px; padding: 5px 10px; border-radius: 999px;
-  background: #ecfdf5; color: #15803d; font-size: 12px; font-weight: 800;
-}
-.upgrade-copy h3 { margin: 0 0 10px; color: var(--text-primary); font-size: 22px; font-weight: 850; }
-.upgrade-copy p { max-width: 680px; color: var(--text-secondary); font-size: 14px; line-height: 1.75; }
-.upgrade-features { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
-.upgrade-features span {
-  padding: 6px 12px; border-radius: 999px; background: var(--bg-hover); color: var(--text-secondary);
-  border: 1px solid var(--border); font-size: 12px; font-weight: 700;
-}
-.upgrade-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; flex-shrink: 0; }
-.upgrade-actions .btn-primary { padding: 10px 20px; }
-.upgrade-actions span { color: var(--text-muted); font-size: 12px; }
 .empty { text-align: center; color: var(--text-muted); padding: 36px !important; }
 .switch-row { display: flex; gap: 16px; flex-wrap: wrap; margin: 6px 0 16px; }
 .switch-row label { flex-direction: row; align-items: center; margin: 0; }
@@ -343,7 +325,5 @@ input:focus, textarea:focus, select:focus { border-color: var(--primary); box-sh
   .data-table { min-width: 860px; }
   .stats-grid, .form-grid { grid-template-columns: 1fr; }
   .page-toolbar { align-items: flex-start; flex-direction: column; }
-  .upgrade-panel { align-items: stretch; flex-direction: column; padding: 22px; }
-  .upgrade-actions { align-items: stretch; }
 }
 </style>

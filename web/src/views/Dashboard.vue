@@ -5,7 +5,7 @@
         <div class="scope-title">安全态势</div>
         <div class="scope-desc">按站点查看攻击趋势、AI 命中和实时事件</div>
       </div>
-      <div class="scope-control">
+      <div class="scope-control" v-if="isPro">
         <label>站点范围</label>
         <select v-model="selectedSite" class="scope-select" @change="reloadBySite">
           <option value="">全部站点</option>
@@ -111,9 +111,9 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="path in pagedTopPaths" :key="path.path">
-            <td><span class="method-tag" :class="getMethodClass(path.path)">{{ getMethod(path.path) }}</span></td>
-            <td class="path-cell" :title="path.path">{{ path.path }}</td>
+          <tr v-for="path in pagedTopPaths" :key="path.path || path.url">
+            <td><span class="method-tag" :class="getMethodClass(path)">{{ getMethod(path) }}</span></td>
+            <td class="path-cell" :title="getPathText(path)">{{ getPathText(path) }}</td>
             <td class="num"><strong>{{ path.count }}</strong></td>
           </tr>
         </tbody>
@@ -158,7 +158,7 @@
               <td class="mono time-cell">{{ fmt(log.timestamp) }}</td>
               <td class="site-cell">{{ siteName(log) }}</td>
               <td class="mono">{{ log.client_ip }}</td>
-              <td><span class="method-tag" :class="getMethodClass(log.path)">{{ getMethod(log.path) }}</span></td>
+              <td><span class="method-tag" :class="getMethodClass(log)">{{ getMethod(log) }}</span></td>
               <td class="path-cell" :title="log.path">{{ log.path }}</td>
               <td>
                 <span class="engine-badge" :class="log.source === 'ai' ? 'ai' : 'rule'">
@@ -189,13 +189,14 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
-import * as echarts from 'echarts'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, inject } from 'vue'
 import { DataAnalysis, WarningFilled, Location, TrendCharts } from '@element-plus/icons-vue'
 import api from '../api'
 import { useWebSocket } from '../composables/useWebSocket'
+import { init as initChartRuntime } from '../utils/chartRuntime'
 
 const stats = ref({})
+const isPro = inject('isPro', ref(false))
 const sites = ref([])
 const selectedSite = ref('')
 const regionPage = ref(1)
@@ -209,6 +210,7 @@ const chartRef = ref(null)
 const chartReady = ref(false)
 let chartInstance = null
 let resizeObserver = null
+let pendingChartObserver = null
 
 // ── 统计卡片 ──
 const blockRate = computed(() => {
@@ -309,13 +311,18 @@ const severityRows = computed(() => {
 })
 
 // ── 攻击路径 ──
-function getMethod(path) { return path?.method || 'GET' }
-function getMethodClass(path) {
-  const m = getMethod(path)
+function getMethod(item) {
+  return String(item?.method || item?.http_method || 'GET').toUpperCase()
+}
+function getMethodClass(item) {
+  const m = getMethod(item)
   if (m === 'POST') return 'post'
-  if (m === 'PUT') return 'put'
+  if (m === 'PUT' || m === 'PATCH') return 'put'
   if (m === 'DELETE') return 'delete'
   return 'get'
+}
+function getPathText(item) {
+  return item?.path || item?.url || '-'
 }
 function rankWidth(count) {
   const max = regionRank.value[0]?.count || 1
@@ -332,8 +339,19 @@ const SEVERITY_COLORS = {
 
 async function initChart() {
   await nextTick()
-  if (!chartRef.value) return
-  chartInstance = echarts.init(chartRef.value, null, { renderer: 'canvas' })
+  if (!chartRef.value || chartInstance || pendingChartObserver) return
+  if (chartRef.value.clientWidth === 0 || chartRef.value.clientHeight === 0) {
+    pendingChartObserver = new ResizeObserver(() => {
+      if (chartRef.value?.clientWidth > 0 && chartRef.value?.clientHeight > 0) {
+        pendingChartObserver?.disconnect()
+        pendingChartObserver = null
+        initChart()
+      }
+    })
+    pendingChartObserver.observe(chartRef.value)
+    return
+  }
+  chartInstance = initChartRuntime(chartRef.value, null, { renderer: 'canvas' })
   updateChart()
   chartReady.value = true
   const ro = new ResizeObserver(() => chartInstance?.resize())
@@ -398,6 +416,11 @@ async function loadRecent() {
 }
 
 async function loadSites() {
+  if (!isPro.value) {
+    sites.value = []
+    selectedSite.value = ''
+    return
+  }
   try { sites.value = await api.get('/sites') || [] } catch {}
 }
 
@@ -420,8 +443,16 @@ function siteName(log) {
 function sevTxt(s) { return { critical:'严重', high:'高危', medium:'中危', low:'低危' }[s] || s }
 function fmt(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '-' }
 
+watch(isPro, (value) => {
+  if (value) loadSites()
+  else {
+    sites.value = []
+    selectedSite.value = ''
+  }
+})
+
 onMounted(() => { loadSites(); loadStats(); initChart(); loadRecent() })
-onBeforeUnmount(() => { resizeObserver?.disconnect(); chartInstance?.dispose(); chartInstance = null })
+onBeforeUnmount(() => { pendingChartObserver?.disconnect(); resizeObserver?.disconnect(); chartInstance?.dispose(); chartInstance = null })
 </script>
 
 <style scoped>

@@ -1,21 +1,11 @@
 <template>
-  <!-- 专业版引导 -->
-  <div class="pro-gate" v-if="!isPro">
-    <div class="gate-card">
-      <div class="gate-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="48" height="48"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-      </div>
-      <h2>专业版功能</h2>
-      <p>地理封锁是专业版专属功能，支持按国家/地区精确屏蔽访问来源，升级后即可使用。</p>
-      <div class="gate-features">
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> 按国家/地区一键封锁</div>
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> 封锁与放行双重策略</div>
-        <div class="gate-feat"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><polyline points="20 6 9 17 4 12"/></svg> 实时生效无需重启</div>
-      </div>
-      <router-link to="/settings" class="gate-btn">升级专业版</router-link>
-      <router-link to="/dashboard" class="gate-back">返回管理面板</router-link>
-    </div>
-  </div>
+  <ProFeatureGate
+    v-if="!isPro"
+    title="地理访问控制"
+    description="按国家和地区管理访问来源，支持封锁与放行双策略，策略保存后实时生效。"
+    feature-key="geo"
+    :features="['国家/地区封锁', '封锁与放行策略', '无需重启实时生效']"
+  />
 
   <div class="geo-page" v-else>
     <div class="page-toolbar">
@@ -87,7 +77,7 @@
               @click="selectCountry(c.name)"
               :disabled="isExisting(c.name)"
             >
-              <span class="chip-flag">{{ c.flag }}</span>
+              <span class="chip-flag">{{ getCode(c.name) }}</span>
               <span class="chip-name">{{ c.name }}</span>
               <span v-if="isExisting(c.name)" class="chip-badge">{{ getExistingAction(c.name) }}</span>
             </button>
@@ -98,7 +88,7 @@
       <!-- 确认添加 -->
       <div class="confirm-bar" v-if="selectedCountry">
         <div class="confirm-info">
-          <span class="confirm-flag">{{ getFlag(selectedCountry) }}</span>
+          <span class="confirm-flag">{{ getCode(selectedCountry) }}</span>
           <span>将 <strong>{{ selectedCountry }}</strong> 加入<strong :class="newAction === 'block' ? 'text-block' : 'text-allow'">{{ newAction === 'block' ? '封锁' : '放行' }}</strong>列表</span>
         </div>
         <div class="confirm-actions">
@@ -131,7 +121,7 @@
       <div class="rules-grid" v-if="filteredRules.length > 0">
         <div class="rule-card" v-for="rule in filteredRules" :key="rule.id" :class="{ disabled: !rule.enabled }">
           <div class="rule-top">
-            <span class="rule-flag">{{ getFlag(rule.country) }}</span>
+            <span class="rule-flag">{{ rule.country_code || getCode(rule.country) }}</span>
             <span class="rule-action-badge" :class="rule.action">{{ rule.action === 'block' ? '封锁' : '放行' }}</span>
           </div>
           <div class="rule-country">{{ rule.country }}</div>
@@ -174,10 +164,11 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, inject } from 'vue'
+import { computed, ref, inject, watch } from 'vue'
 import { Location } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const isPro = inject('isPro', ref(false))
 
@@ -228,9 +219,6 @@ const countryData = [
   ]},
 ]
 
-const flagMap = {}
-countryData.forEach(r => r.countries.forEach(c => { flagMap[c.name] = c.flag }))
-
 const filteredRegions = computed(() => {
   if (!searchQuery.value) return countryData
   const q = searchQuery.value.toLowerCase()
@@ -240,7 +228,6 @@ const filteredRegions = computed(() => {
   })).filter(r => r.countries.length > 0)
 })
 
-function getFlag(name) { return flagMap[name] || '  ' }
 function getCode(name) {
   const map = { '美国':'US','日本':'JP','韩国':'KR','印度':'IN','俄罗斯':'RU','巴西':'BR','德国':'DE','英国':'GB','法国':'FR','加拿大':'CA','澳大利亚':'AU','荷兰':'NL','新加坡':'SG','印度尼西亚':'ID','泰国':'TH','越南':'VN','菲律宾':'PH','伊朗':'IR','朝鲜':'KP','土耳其':'TR','意大利':'IT','西班牙':'ES','波兰':'PL','乌克兰':'UA','墨西哥':'MX','阿根廷':'AR','哥伦比亚':'CO','南非':'ZA','尼日利亚':'NG','埃及':'EG','沙特阿拉伯':'SA','以色列':'IL','马来西亚':'MY','中国台湾':'TW','中国香港':'HK','中国':'CN','中国澳门':'MO' }
   return map[name] || ''
@@ -259,6 +246,7 @@ function selectCountry(name) {
 }
 
 async function loadRules() {
+  if (!isPro.value) return
   loading.value = true
   try {
     const res = await api.get('/geo/rules') || []
@@ -267,6 +255,7 @@ async function loadRules() {
 }
 
 async function addRule() {
+  if (!isPro.value) return
   const country = selectedCountry.value.trim()
   if (!country) { ElMessage.warning('请选择国家/地区'); return }
   try {
@@ -278,6 +267,7 @@ async function addRule() {
 }
 
 async function toggleRule(rule) {
+  if (!isPro.value) return
   try {
     await api.put(`/geo/rules/${rule.id}`, { country: rule.country, action: rule.action, enabled: !rule.enabled })
     ElMessage.success(rule.enabled ? '已禁用' : '已启用')
@@ -286,6 +276,7 @@ async function toggleRule(rule) {
 }
 
 async function removeRule(id) {
+  if (!isPro.value) return
   try {
     await ElMessageBox.confirm('确定删除此地理封锁规则？', '确认', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
     await api.delete(`/geo/rules/${id}`)
@@ -294,39 +285,17 @@ async function removeRule(id) {
   } catch {}
 }
 
-onMounted(loadRules)
+watch(isPro, (value) => {
+  if (value) loadRules()
+  else {
+    rules.value = []
+    selectedCountry.value = ''
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
 .geo-page { max-width: 1100px; }
-
-/* Pro Gate */
-.pro-gate { display: flex; align-items: center; justify-content: center; min-height: 60vh; }
-.gate-card {
-  text-align: center; max-width: 420px; padding: 48px 40px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-lg, 20px);
-  box-shadow: 0 4px 24px rgba(0,0,0,.06);
-}
-.gate-icon { margin-bottom: 20px; color: #d97706; }
-.gate-card h2 { font-size: 22px; font-weight: 800; color: var(--text-primary); margin-bottom: 10px; }
-.gate-card p { font-size: 14px; color: var(--text-muted); line-height: 1.6; margin-bottom: 20px; }
-.gate-features { text-align: left; margin-bottom: 24px; }
-.gate-feat {
-  display: flex; align-items: center; gap: 8px;
-  padding: 8px 0; font-size: 13px; color: var(--text-secondary); font-weight: 500;
-}
-.gate-feat svg { color: #059669; flex-shrink: 0; }
-.gate-btn {
-  display: inline-block; padding: 10px 28px; border-radius: 10px;
-  background: var(--primary); color: #fff; font-size: 14px; font-weight: 700;
-  text-decoration: none; transition: all 0.2s;
-}
-.gate-btn:hover { background: var(--primary-hover); }
-.gate-back {
-  display: block; margin-top: 12px; font-size: 13px; color: var(--text-muted);
-  text-decoration: none;
-}
-.gate-back:hover { color: var(--primary); }
 
 /* 统计卡片 */
 .stat-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin-bottom: 20px; }
@@ -383,7 +352,18 @@ onMounted(loadRules)
 .country-chip:hover:not(.disabled) { border-color: var(--primary); background: var(--primary-light); }
 .country-chip.selected { border-color: var(--primary); background: #eef2ff; box-shadow: 0 0 0 2px rgba(79,70,229,.15); }
 .country-chip.disabled { opacity: 0.5; cursor: default; background: var(--bg-subtle); }
-.chip-flag { font-size: 16px; line-height: 1; }
+.chip-flag {
+  min-width: 24px;
+  padding: 2px 5px;
+  border-radius: 5px;
+  background: var(--bg-subtle);
+  color: var(--text-secondary);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 1;
+  text-align: center;
+}
 .chip-name { font-weight: 500; }
 .chip-badge { font-size: 10px; font-weight: 700; padding: 1px 6px; border-radius: 4px; background: var(--bg-subtle); color: var(--text-muted); }
 
@@ -394,7 +374,17 @@ onMounted(loadRules)
   background: #eef2ff; border: 1px solid #c7d2fe;
 }
 .confirm-info { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text-primary); }
-.confirm-flag { font-size: 20px; }
+.confirm-flag {
+  min-width: 30px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  background: #fff;
+  color: var(--primary);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
 .text-block { color: #e11d48; }
 .text-allow { color: #059669; }
 .confirm-actions { display: flex; gap: 8px; }
@@ -440,7 +430,18 @@ onMounted(loadRules)
 .rule-card:hover { box-shadow: 0 2px 8px rgba(0,0,0,.06); }
 .rule-card.disabled { opacity: 0.55; }
 .rule-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
-.rule-flag { font-size: 28px; line-height: 1; }
+.rule-flag {
+  min-width: 38px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  background: #f8fafc;
+  color: var(--primary);
+  font-family: 'SF Mono', 'Menlo', monospace;
+  font-size: 13px;
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+}
 .rule-action-badge { font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 5px; }
 .rule-action-badge.block { background: #fff1f2; color: #e11d48; }
 .rule-action-badge.allow { background: #ecfdf5; color: #059669; }

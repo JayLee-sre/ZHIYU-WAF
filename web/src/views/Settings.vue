@@ -299,15 +299,15 @@
         </div>
       </div>
 
-      <div v-else class="panel full-width user-gate">
-        <div class="user-gate-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-        </div>
-        <div>
-          <strong>多用户与 RBAC 属于专业版能力</strong>
-          <span>升级后可创建操作员和只读账号，适合团队协作与审计追踪。</span>
-        </div>
-      </div>
+      <ProFeatureGate
+        v-else
+        compact
+        class="full-width"
+        title="多用户与 RBAC"
+        description="升级后可创建操作员和只读账号，支持团队协作、权限隔离与审计追踪。"
+        feature-key="users"
+        :features="['操作员账号', '只读审计账号', '权限隔离']"
+      />
     </div>
   </div>
 </template>
@@ -318,6 +318,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { CircleCheck, Hide, Key, RefreshRight, View, Setting, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -1162,36 +1163,6 @@ onMounted(async () => {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
   gap: 10px;
-}
-.user-gate {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  padding: 22px;
-  color: #475569;
-}
-.user-gate-icon {
-  width: 46px;
-  height: 46px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: #ecfeff;
-  color: #0891b2;
-}
-.user-gate strong {
-  display: block;
-  font-size: 15px;
-  color: #0f172a;
-  margin-bottom: 4px;
-}
-.user-gate span {
-  display: block;
-  font-size: 13px;
-  line-height: 1.6;
-  color: #64748b;
 }
 .user-card {
   display: flex;

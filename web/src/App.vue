@@ -15,33 +15,36 @@
       </div>
 
       <nav class="nav-menu">
-        <router-link
-          v-for="item in menuItems"
-          :key="item.path"
-          :to="item.path"
-          class="nav-item"
-          :class="{ active: route.path === item.path }"
-        >
-          <div class="nav-icon-wrap">
-            <div class="nav-icon" :class="item.color">
-              <el-icon :size="18"><component :is="item.icon" /></el-icon>
+        <div class="nav-group" v-for="group in menuGroups" :key="group.label">
+          <div class="nav-group-title">{{ group.label }}</div>
+          <router-link
+            v-for="item in group.items"
+            :key="item.path"
+            :to="item.path"
+            class="nav-item"
+            :class="{ active: route.path === item.path }"
+          >
+            <div class="nav-icon-wrap">
+              <div class="nav-icon" :class="item.color">
+                <el-icon :size="18"><component :is="item.icon" /></el-icon>
+              </div>
             </div>
-          </div>
-          <div class="nav-content">
-            <span class="nav-label">{{ item.label }}</span>
-            <span class="nav-desc">{{ item.desc }}</span>
-          </div>
-          <div class="nav-lock" v-if="item.pro && !isPro">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-          </div>
-          <div class="nav-indicator" v-if="route.path === item.path"></div>
-        </router-link>
+            <div class="nav-content">
+              <span class="nav-label">{{ item.label }}</span>
+              <span class="nav-desc">{{ item.desc }}</span>
+            </div>
+            <div class="nav-lock" v-if="item.pro && !isPro">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+            </div>
+            <div class="nav-indicator" v-if="route.path === item.path"></div>
+          </router-link>
+        </div>
       </nav>
 
       <div class="sidebar-footer">
         <div class="engine-status">
-          <div class="status-dot" :class="{ active: true }"></div>
-          <span class="status-text">防护引擎运行中</span>
+          <div class="status-dot" :class="{ active: systemOk, warning: !systemOk }"></div>
+          <span class="status-text">{{ systemOk ? '防护引擎运行中' : '防护状态待确认' }}</span>
         </div>
         <button class="logout-btn" @click="logout">
           <el-icon :size="16"><SwitchButton /></el-icon>
@@ -114,33 +117,56 @@ provide('isPro', isPro)
 const sidebarOpen = ref(false)
 
 watch(() => route.path, () => {
-  document.body.style.background = '#f4f6fb'
+  document.body.style.background = '#f5f7fb'
 }, { immediate: true })
 
 watch(() => route.path, () => { sidebarOpen.value = false })
 
-const menuItems = [
-  { path: '/dashboard', label: '安全态势', desc: '实时监控总览', icon: Monitor, color: 'indigo' },
-  { path: '/logs', label: '攻击日志', desc: '威胁事件追踪', icon: Document, color: 'rose' },
-  { path: '/ssh-logs', label: 'SSH 监控', desc: '暴力破解防护', icon: Key, color: 'amber' },
-  { path: '/rules', label: '规则引擎', desc: '检测规则管理', icon: SetUp, color: 'amber' },
-  { path: '/iplist', label: '访问控制', desc: 'IP 黑白名单', icon: Filter, color: 'cyan' },
-  { path: '/threatintel', label: '威胁情报', desc: '自动恶意IP同步', icon: Warning, color: 'rose', pro: true },
-  { path: '/audit', label: '审计日志', desc: '操作记录追踪', icon: List, color: 'cyan' },
-  { path: '/certs', label: 'SSL 证书', desc: 'TLS 证书管理', icon: Lock, color: 'green' },
-  { path: '/settings', label: '系统设置', desc: '授权与安全配置', icon: Setting, color: 'slate' },
-  { path: '/geo', label: '地理封锁', desc: '按国家/地区屏蔽', icon: Location, color: 'indigo', pro: true },
-  { path: '/sites', label: '站点管理', desc: '多站代理回源', icon: Connection, color: 'green', pro: true },
-  { path: '/ai', label: 'AI 模型', desc: '智能检测配置', icon: Cpu, color: 'violet', pro: true },
-  { path: '/soc-dashboard', label: '监控大屏', desc: '安全态势可视化', icon: DataAnalysis, color: 'green', pro: true },
+const menuGroups = [
+  {
+    label: '运营总览',
+    items: [
+      { path: '/dashboard', label: '安全态势', desc: '风险与拦截总览', icon: Monitor, color: 'indigo' },
+      { path: '/logs', label: '攻击日志', desc: '威胁事件追踪', icon: Document, color: 'rose' },
+      { path: '/soc-dashboard', label: '监控大屏', desc: '态势可视化', icon: DataAnalysis, color: 'green', pro: true },
+    ],
+  },
+  {
+    label: '防护策略',
+    items: [
+      { path: '/rules', label: '规则引擎', desc: '检测规则管理', icon: SetUp, color: 'amber' },
+      { path: '/iplist', label: '访问控制', desc: 'IP 黑白名单', icon: Filter, color: 'cyan' },
+      { path: '/geo', label: '地理封锁', desc: '国家/地区策略', icon: Location, color: 'indigo', pro: true },
+      { path: '/threatintel', label: '威胁情报', desc: '恶意 IP 同步', icon: Warning, color: 'rose', pro: true },
+    ],
+  },
+  {
+    label: '资产与能力',
+    items: [
+      { path: '/sites', label: '站点管理', desc: '多站代理回源', icon: Connection, color: 'green', pro: true },
+      { path: '/certs', label: 'SSL 证书', desc: 'TLS 证书管理', icon: Lock, color: 'green' },
+      { path: '/ai', label: 'AI 模型', desc: '智能检测配置', icon: Cpu, color: 'violet', pro: true },
+    ],
+  },
+  {
+    label: '系统治理',
+    items: [
+      { path: '/ssh-logs', label: 'SSH 监控', desc: '暴力破解防护', icon: Key, color: 'amber' },
+      { path: '/audit', label: '审计日志', desc: '操作记录追踪', icon: List, color: 'cyan' },
+      { path: '/settings', label: '系统设置', desc: '授权与安全配置', icon: Setting, color: 'slate' },
+    ],
+  },
 ]
 
+const menuItems = menuGroups.flatMap(group => group.items)
 const currentMenu = computed(() => menuItems.find(i => i.path === route.path))
 const statusLoading = ref(true)
 const aiEnabled = ref(false)
 const systemOk = ref(true)
 const ruleCount = ref(0)
 const aiStatus = computed(() => aiEnabled.value ? '已启用' : '未启用')
+let headerStatusLoadedAt = 0
+let headerStatusRequest = null
 
 function updateDocumentTitle() {
   let pageName = currentMenu.value?.label
@@ -151,33 +177,38 @@ function updateDocumentTitle() {
     : `智域 WAF ${editionLabel.value}`
 }
 
-async function loadHeaderStatus() {
+async function loadHeaderStatus(force = false) {
   if (isLoginPage.value || !getAuthToken()) return
+  const now = Date.now()
+  if (!force && headerStatusRequest) return headerStatusRequest
+  if (!force && now - headerStatusLoadedAt < 15000) return
   statusLoading.value = true
-  try {
-    const [health, rules] = await Promise.all([
-      api.get('/health', { suppressError: true }),
-      api.get('/rules', { suppressError: true }),
-    ])
+  headerStatusRequest = Promise.all([
+    api.get('/health', { suppressError: true }),
+    api.get('/rules', { suppressError: true }),
+  ]).then(([health, rules]) => {
     systemOk.value = health?.status === 'ok'
     aiEnabled.value = !!health?.ai_enabled
     ruleCount.value = Array.isArray(rules) ? rules.length : 0
     edition.value = health?.edition === 'pro' ? 'pro' : 'community'
-  } catch {
+    headerStatusLoadedAt = Date.now()
+  }).catch(() => {
     edition.value = 'community'
     systemOk.value = false
-  } finally {
+  }).finally(() => {
     statusLoading.value = false
-  }
+    headerStatusRequest = null
+  })
+  return headerStatusRequest
 }
 
-watch(isStandalone, (standalone) => {
-  if (!standalone) loadHeaderStatus()
+watch(() => route.path, () => {
+  if (!isStandalone.value) loadHeaderStatus()
 })
 
 watch([() => route.path, editionLabel], updateDocumentTitle, { immediate: true })
 
-onMounted(loadHeaderStatus)
+onMounted(() => loadHeaderStatus(true))
 
 function logout() {
   ElMessageBox.confirm('确定退出当前账号？', '退出确认', {
@@ -208,17 +239,18 @@ function logout() {
 
 /* ===== Sidebar ===== */
 .sidebar {
-  width: 260px;
-  background: #fff;
-  border-right: 1px solid #eef0f4;
+  width: 272px;
+  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  border-right: 1px solid #dfe7f1;
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
+  box-shadow: 8px 0 28px rgba(15, 23, 42, 0.03);
 }
 
 .sidebar-header {
-  padding: 20px 20px 16px;
-  border-bottom: 1px solid #eef0f4;
+  padding: 18px 18px 14px;
+  border-bottom: 1px solid #edf2f7;
 }
 
 .brand {
@@ -227,51 +259,65 @@ function logout() {
   gap: 12px;
 }
 .brand-icon {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   flex-shrink: 0;
-  border-radius: 10px;
+  border-radius: 8px;
   overflow: hidden;
   background: #fff;
-  box-shadow: 0 0 0 1px #eef2f7;
+  box-shadow: 0 0 0 1px #dfe7f1, 0 8px 18px rgba(15, 23, 42, 0.06);
 }
 .brand-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand-text { display: flex; flex-direction: column; }
-.brand-name { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: -0.5px; }
-.brand-tag { font-size: 10px; color: #94a3b8; letter-spacing: 1px; text-transform: uppercase; margin-top: 1px; }
+.brand-name { font-size: 18px; font-weight: 800; color: #0f172a; letter-spacing: 0; }
+.brand-tag { font-size: 11px; color: #64748b; letter-spacing: 0; margin-top: 1px; }
 
 .nav-menu {
   flex: 1;
-  padding: 12px 12px;
+  padding: 10px 12px 14px;
   overflow-y: auto;
+}
+
+.nav-group {
+  padding: 10px 0;
+  border-bottom: 1px solid #edf2f7;
+}
+.nav-group:last-child { border-bottom: none; }
+.nav-group-title {
+  padding: 0 10px 8px;
+  color: #64748b;
+  font-size: 11px;
+  font-weight: 800;
+  letter-spacing: 0;
 }
 
 .nav-item {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 10px;
-  margin-bottom: 2px;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 9px;
+  border-radius: 8px;
+  margin-bottom: 3px;
   text-decoration: none;
   color: #64748b;
   transition: all 0.2s ease;
   position: relative;
 }
 .nav-item:hover {
-  background: #f8f9fc;
+  background: #f6f9fd;
   color: #334155;
 }
 .nav-item.active {
-  background: linear-gradient(135deg, #eef2ff 0%, #f0f0ff 100%);
-  color: #6366f1;
-  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+  background: #eef2ff;
+  color: #4338ca;
+  box-shadow: inset 0 0 0 1px #c7d2fe;
 }
 
 .nav-icon-wrap { flex-shrink: 0; }
 .nav-icon {
-  width: 34px; height: 34px;
-  border-radius: 9px;
+  width: 32px; height: 32px;
+  border-radius: 8px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -293,19 +339,19 @@ function logout() {
 .nav-item.active .nav-icon.slate { background: #334155; color: #fff; }
 .nav-item.active .nav-icon.green { background: #16a34a; color: #fff; }
 
-.nav-content { display: flex; flex-direction: column; min-width: 0; }
-.nav-label { font-size: 13.5px; font-weight: 600; }
-.nav-desc { font-size: 11px; color: #94a3b8; margin-top: 1px; }
-.nav-item.active .nav-desc { color: #818cf8; }
+.nav-content { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.nav-label { font-size: 13px; font-weight: 700; }
+.nav-desc { font-size: 11px; color: #94a3b8; margin-top: 0; }
+.nav-item.active .nav-desc { color: #6366f1; }
 
 .nav-indicator {
   position: absolute;
   left: 0; top: 50%;
   transform: translateY(-50%);
-  width: 3px; height: 20px;
+  width: 3px; height: 22px;
   border-radius: 3px;
   background: #6366f1;
-  box-shadow: 0 0 6px rgba(99, 102, 241, 0.4);
+  box-shadow: none;
 }
 
 .nav-lock {
@@ -316,8 +362,9 @@ function logout() {
 }
 
 .sidebar-footer {
-  padding: 16px 20px;
-  border-top: 1px solid #eef0f4;
+  padding: 14px 18px;
+  border-top: 1px solid #edf2f7;
+  background: #fff;
 }
 
 .engine-status {
@@ -336,6 +383,10 @@ function logout() {
   box-shadow: 0 0 6px rgba(34,197,94,0.5);
   animation: pulse 2s infinite;
 }
+.status-dot.warning {
+  background: #f59e0b;
+  box-shadow: 0 0 6px rgba(245,158,11,0.35);
+}
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 .status-text { font-size: 12px; color: #64748b; }
 
@@ -346,7 +397,7 @@ function logout() {
   justify-content: center;
   gap: 6px;
   padding: 8px;
-  border: 1px solid #e2e8f0;
+  border: 1px solid #dfe7f1;
   border-radius: 8px;
   background: #fff;
   color: #64748b;
@@ -369,15 +420,15 @@ function logout() {
 }
 
 .topbar {
-  height: 56px;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border-bottom: 1px solid #eef0f4;
+  height: 60px;
+  background: rgba(255, 255, 255, 0.94);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border-bottom: 1px solid #dfe7f1;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 28px;
+  padding: 0 24px;
   flex-shrink: 0;
   position: sticky;
   top: 0;
@@ -386,8 +437,8 @@ function logout() {
 
 .topbar-left { display: flex; align-items: center; }
 .breadcrumb { display: flex; align-items: baseline; gap: 10px; }
-.breadcrumb-current { font-size: 16px; font-weight: 700; color: #0f172a; }
-.breadcrumb-desc { font-size: 12.5px; color: #94a3b8; }
+.breadcrumb-current { font-size: 16px; font-weight: 800; color: #0f172a; }
+.breadcrumb-desc { font-size: 12.5px; color: #64748b; }
 
 .topbar-right { display: flex; align-items: center; }
 .status-chips { display: flex; gap: 8px; }
@@ -395,10 +446,11 @@ function logout() {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 5px 12px;
-  background: #f8f9fc;
-  border: 1px solid #eef0f4;
-  border-radius: 20px;
+  height: 30px;
+  padding: 0 11px;
+  background: #f8fafc;
+  border: 1px solid #dfe7f1;
+  border-radius: 999px;
   font-size: 12px;
   color: #475569;
   font-weight: 500;
@@ -421,9 +473,11 @@ function logout() {
 
 .content-wrapper {
   flex: 1;
-  padding: 24px 28px;
+  padding: 22px 24px;
   overflow-y: auto;
-  background: linear-gradient(180deg, #f4f6fb 0%, #f8f9fc 100%);
+  background:
+    radial-gradient(circle at 16% -12%, rgba(37,99,235,.08), transparent 28%),
+    linear-gradient(180deg, #f7f9fd 0%, #f5f7fb 46%, #f8fafc 100%);
 }
 
 .app-footer {
@@ -432,7 +486,7 @@ function logout() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-top: 1px solid #eef0f4;
+  border-top: 1px solid #dfe7f1;
   background: #fff;
   color: #94a3b8;
   font-size: 12px;
@@ -461,6 +515,7 @@ function logout() {
   .sidebar-overlay { display: block; }
   .hamburger-btn { display: flex; }
   .brand-tag { display: none; }
+  .nav-group-title { padding-top: 4px; }
   .status-chips { display: none; }
   .topbar { padding: 0 16px; }
   .breadcrumb-desc { display: none; }

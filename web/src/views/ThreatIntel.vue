@@ -1,13 +1,11 @@
 <template>
-  <div v-if="!isPro" class="pro-gate">
-    <div class="pro-gate-icon">
-      <el-icon :size="28"><Warning /></el-icon>
-    </div>
-    <div>
-      <div class="pro-gate-title">威胁情报属于专业版能力</div>
-      <div class="pro-gate-desc">专业版可自动同步恶意 IP 情报源，并将高风险 IP 写入黑名单防护链路。</div>
-    </div>
-  </div>
+  <ProFeatureGate
+    v-if="!isPro"
+    title="威胁情报联动"
+    description="自动同步恶意 IP 情报源，将高风险来源写入黑名单，并与访问控制链路联动生效。"
+    feature-key="threatintel"
+    :features="['恶意 IP 自动同步', '黑名单联动封禁', '同步审计与状态追踪']"
+  />
 
   <div v-else class="ti-page">
     <!-- 头部 -->
@@ -179,10 +177,11 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, onMounted } from 'vue'
+import { ref, computed, inject, watch } from 'vue'
 import { Warning, RefreshRight, Refresh, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
+import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const status = ref({ provider: 'abuseipdb', last_sync: null, ip_count: 0 })
 const isPro = inject('isPro', ref(false))
@@ -203,6 +202,7 @@ function formatTime(ts) {
 }
 
 async function loadStatus() {
+  if (!isPro.value) return
   loading.value = true
   try {
     const res = await api.get('/threatintel/status')
@@ -213,6 +213,7 @@ async function loadStatus() {
 }
 
 async function triggerSync() {
+  if (!isPro.value) return
   syncing.value = true
   try {
     const res = await api.post('/threatintel/sync')
@@ -222,6 +223,7 @@ async function triggerSync() {
 }
 
 async function saveConfig() {
+  if (!isPro.value) return
   if (!apiKey.value.trim()) { ElMessage.warning('请输入 API Key'); return }
   saving.value = true
   try {
@@ -231,48 +233,17 @@ async function saveConfig() {
   } catch {} finally { saving.value = false }
 }
 
-onMounted(() => {
-  if (isPro.value) loadStatus()
-})
+watch(isPro, (value) => {
+  if (value) loadStatus()
+  else {
+    threatIPs.value = []
+    status.value = { provider: 'abuseipdb', last_sync: null, ip_count: 0 }
+  }
+}, { immediate: true })
 </script>
 
 <style scoped>
 .ti-page { }
-
-.pro-gate {
-  min-height: 360px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 18px;
-  padding: 32px;
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-}
-.pro-gate-icon {
-  width: 60px;
-  height: 60px;
-  border-radius: 16px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: #fff1f2;
-  color: #e11d48;
-}
-.pro-gate-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-}
-.pro-gate-desc {
-  max-width: 520px;
-  font-size: 14px;
-  line-height: 1.7;
-  color: var(--text-secondary);
-}
 
 /* Header */
 .ti-header {
@@ -422,12 +393,6 @@ onMounted(() => {
 
 /* Responsive */
 @media (max-width: 768px) {
-  .pro-gate {
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    min-height: 300px;
-  }
   .ti-header { flex-direction: column; align-items: flex-start; gap: 12px; }
   .header-actions { width: 100%; }
   .header-actions button { flex: 1; justify-content: center; }
