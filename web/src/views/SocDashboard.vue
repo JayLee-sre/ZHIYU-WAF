@@ -1,15 +1,5 @@
 <template>
-  <ProFeatureGate
-    v-if="!isPro"
-    fullscreen
-    title="安全态势监控大屏"
-    description="面向值守场景的大屏视图，聚合攻击趋势、来源分布、规则命中和实时轨迹。"
-    feature-key="soc"
-    :features="['全屏态势展示', '实时攻击趋势', '来源与规则聚合']"
-  />
-
-  <!-- 专业版大屏 -->
-  <div class="soc" v-else>
+  <div class="soc">
     <header class="topbar">
       <div class="tl">
         <router-link to="/dashboard" class="back">← 管理面板</router-link>
@@ -107,12 +97,9 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick, inject } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue'
 import * as echarts from 'echarts'
 import api from '../api'
-import ProFeatureGate from '../components/ProFeatureGate.vue'
-
-const isPro = inject('isPro', ref(false))
 
 const stats = ref({}), healthData = ref({}), sshStats = ref({}), threatInfo = ref({})
 const ruleCount = ref(0), currentTime = ref('')
@@ -272,7 +259,6 @@ function cCoord(r){
 }
 
 async function loadAll(){
-  if (!isPro.value) return
   const[st,h,ssh,ti,rl]=await Promise.allSettled([
     api.get('/stats'),api.get('/health'),api.get('/ssh/stats'),api.get('/threatintel/status'),api.get('/rules')])
   if(st.status==='fulfilled')stats.value=st.value||{}
@@ -283,7 +269,6 @@ async function loadAll(){
 }
 
 async function startDashboard() {
-  if (!isPro.value) return
   await loadAll(); await loadMaps(); await nextTick()
   initSev(); initSrc(); initW(); initC(); initTrend()
   ro=new ResizeObserver(()=>{sevC?.resize();srcC?.resize();wC?.resize();cC?.resize();trC?.resize()})
@@ -295,7 +280,6 @@ onMounted(async()=>{
   tick(); clk=setInterval(tick,1000)
   await startDashboard()
 })
-watch(isPro, (value) => { if (value && !refreshTimer) startDashboard() })
 watch(()=>stats.value.by_severity,()=>updSev(),{deep:true})
 watch(()=>stats.value.by_source,()=>updSrc(),{deep:true})
 watch(wRegs,()=>updW(),{deep:true})

@@ -14,12 +14,12 @@
     <!-- 筛选栏 -->
     <div class="filter-bar">
       <div class="filter-group">
-        <div class="filter-item" v-if="isPro">
+        <div class="filter-item">
           <label>站点范围</label>
           <select v-model="filters.site_id" class="filter-select site-select" @change="page = 1; loadLogs()">
             <option value="">全部站点</option>
             <option v-for="site in sites" :key="site.id" :value="site.id">
-              {{ site.name }} · {{ site.domains?.[0] || site.upstream }}
+              {{ site.domain }} · {{ site.backend_url }}
             </option>
           </select>
         </div>
@@ -28,22 +28,18 @@
           <input v-model="filters.client_ip" placeholder="输入 IP 地址" class="filter-input" @keyup.enter="loadLogs" />
         </div>
         <div class="filter-item">
-          <label>威胁等级</label>
-          <select v-model="filters.severity" class="filter-select" @change="loadLogs">
+          <label>最终动作</label>
+          <select v-model="filters.action" class="filter-select" @change="page = 1; loadLogs()">
             <option value="">全部</option>
-            <option value="critical">严重</option>
-            <option value="high">高危</option>
-            <option value="medium">中危</option>
-            <option value="low">低危</option>
+            <option value="block">拦截</option>
+            <option value="rate_limit">限流</option>
+            <option value="log">仅记录</option>
+            <option value="allow">放行</option>
           </select>
         </div>
         <div class="filter-item">
-          <label>检测引擎</label>
-          <select v-model="filters.source" class="filter-select" @change="loadLogs">
-            <option value="">全部</option>
-            <option value="rule_engine">规则引擎</option>
-            <option value="ai">AI 检测</option>
-          </select>
+          <label>事件类别</label>
+          <input v-model="filters.category" placeholder="如 xss" class="filter-input" @keyup.enter="page = 1; loadLogs()" />
         </div>
       </div>
       <div class="filter-actions">
@@ -66,36 +62,29 @@
             <th>时间</th>
             <th>站点</th>
             <th>来源 IP</th>
-            <th>地区</th>
             <th>方法</th>
             <th>攻击路径</th>
-            <th>检测引擎</th>
             <th>
               <span class="th-help">
-                检测结果
-                <button class="help-btn" type="button" @click.stop="toggleHelp('result')" aria-label="检测结果说明">?</button>
+                风险证据
+                <button class="help-btn" type="button" @click.stop="toggleHelp('result')" aria-label="风险证据说明">?</button>
               </span>
             </th>
-            <th>危险度</th>
+            <th>风险分</th>
+            <th>最终动作</th>
             <th></th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="log in logs" :key="log.id" @click="showDetail(log)" class="clickable-row">
-            <td class="mono time-cell">{{ fmt(log.timestamp) }}</td>
+            <td class="mono time-cell">{{ fmt(log.created_at) }}</td>
             <td class="site-cell">{{ siteName(log) }}</td>
             <td class="mono">{{ log.client_ip }}</td>
-            <td class="region-cell">{{ log.region || '-' }}</td>
             <td><span class="method-tag" :class="log.method?.toLowerCase()">{{ log.method }}</span></td>
             <td class="path-cell" :title="log.path">{{ log.path }}</td>
-            <td>
-              <span class="engine-badge" :class="log.source === 'ai' ? 'ai' : 'rule'">
-                <el-icon v-if="log.source === 'ai'" :size="12"><Cpu /></el-icon>
-                {{ log.source === 'ai' ? 'AI' : '规则' }}
-              </span>
-            </td>
-            <td class="result-cell">{{ log.rule_name }}</td>
-            <td><span class="severity-pill" :class="log.severity">{{ sevTxt(log.severity) }}</span></td>
+            <td class="result-cell">{{ evidence(log) }}</td>
+            <td><span class="severity-pill" :class="riskLevel(log)">{{ log.risk_score ?? 0 }}</span></td>
+            <td><span class="action-chip" :class="`action-${String(log.action || 'allow').replace('_', '-')}`">{{ actionText(log.action) }}</span></td>
             <td><span class="detail-link">详情</span></td>
           </tr>
         </tbody>
@@ -139,8 +128,8 @@
       <div class="modal-card">
         <div class="modal-header">
           <div>
-            <div class="modal-title">攻击详情</div>
-            <div class="modal-subtitle">请求 ID: {{ d?.id }}</div>
+            <div class="modal-title">风险事件详情</div>
+            <div class="modal-subtitle">请求 ID: {{ d?.request_id || d?.id }}</div>
           </div>
           <button class="modal-close" @click="detailVisible = false">
             <el-icon :size="18"><Close /></el-icon>
@@ -150,23 +139,19 @@
           <div class="detail-grid">
             <div class="detail-row">
               <span class="detail-label">时间</span>
-              <span class="detail-value">{{ fmt(d.timestamp) }}</span>
+              <span class="detail-value">{{ fmt(d.created_at) }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">所属站点</span>
               <span class="detail-value">{{ siteName(d) }}</span>
             </div>
-            <div class="detail-row" v-if="d.domain">
+            <div class="detail-row" v-if="d.host">
               <span class="detail-label">访问域名</span>
-              <span class="detail-value mono">{{ d.domain }}</span>
+              <span class="detail-value mono">{{ d.host }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">来源 IP</span>
               <span class="detail-value mono">{{ d.client_ip }}</span>
-            </div>
-            <div class="detail-row" v-if="d.region">
-              <span class="detail-label">地区</span>
-              <span class="detail-value">{{ d.region }}</span>
             </div>
             <div class="detail-row">
               <span class="detail-label">请求方法</span>
@@ -177,46 +162,28 @@
               <span class="detail-value mono">{{ d.path }}</span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">检测引擎</span>
-              <span class="detail-value">
-                <span class="engine-badge" :class="d.source === 'ai' ? 'ai' : 'rule'">
-                  {{ d.source === 'ai' ? 'AI 智能检测' : '规则引擎' }}
-                </span>
-              </span>
-            </div>
-            <div class="detail-row">
               <span class="detail-label label-with-help">
-                检测结果
-                <button class="help-btn" type="button" @click.stop="toggleHelp('detail-result')" aria-label="检测结果说明">?</button>
+                风险证据
+                <button class="help-btn" type="button" @click.stop="toggleHelp('detail-result')" aria-label="风险证据说明">?</button>
               </span>
               <span class="detail-value">
-                {{ d.rule_name }}
+                {{ evidence(d) }}
                 <span class="plain-explain">{{ detectionExplain(d) }}</span>
               </span>
             </div>
             <div class="detail-row">
-              <span class="detail-label">危险度</span>
-              <span class="detail-value"><span class="severity-pill" :class="d.severity">{{ sevTxt(d.severity) }}</span></span>
+              <span class="detail-label">风险分</span>
+              <span class="detail-value"><span class="severity-pill" :class="riskLevel(d)">{{ d.risk_score ?? 0 }}</span></span>
             </div>
-            <div class="detail-row" v-if="d.ai_reasoning">
-              <span class="detail-label label-with-help">
-                AI 分析
-                <button class="help-btn" type="button" @click.stop="toggleHelp('ai-result')" aria-label="AI 分析说明">?</button>
-              </span>
-              <span class="detail-value">{{ d.ai_reasoning }}</span>
-            </div>
-          <div class="detail-row" v-if="d.source === 'ai'">
-              <span class="detail-label">人工复核</span>
-              <span class="detail-value review-actions">
-                <button class="btn-ghost" @click.stop="markReviewed">确认有效</button>
-                <button class="btn-primary danger" @click.stop="markFalsePositive">标记误报并学习白名单</button>
-              </span>
+            <div class="detail-row">
+              <span class="detail-label">最终动作</span>
+              <span class="detail-value"><span class="action-chip" :class="`action-${String(d.action || 'allow').replace('_', '-')}`">{{ actionText(d.action) }}</span></span>
             </div>
           </div>
           <div class="detail-help" v-if="helpKey === 'detail-result' || helpKey === 'ai-result'">
             <button class="help-close" @click="helpKey = ''">×</button>
             <strong>{{ helpKey === 'ai-result' ? 'AI 分析说明' : '检测结果说明' }}</strong>
-            <p>{{ helpKey === 'ai-result' ? 'AI 分析会用更接近业务的语言说明这次访问哪里异常、可能影响什么。它用于辅助判断，仍建议结合路径、IP 和请求内容复核。' : '检测结果是系统命中的规则或 AI 判断名称，用来说明本次访问被拦截的主要原因。下面的解释会把它翻译成普通客户能看懂的话。' }}</p>
+            <p>风险证据是本地防护链命中的规则标识或分类，用来说明这次请求为什么被判定为存在风险。建议结合来源 IP、路径、风险分和最终动作复核。</p>
           </div>
         </div>
       </div>
@@ -225,58 +192,73 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, inject, watch } from 'vue'
-import { Search, Document, Cpu, Close } from '@element-plus/icons-vue'
+import { ref, reactive, computed, onMounted } from 'vue'
+import { Search, Document, Close } from '@element-plus/icons-vue'
 import api from '../api'
-import { ElMessage, ElMessageBox } from 'element-plus'
 
 const logs = ref([]), total = ref(0), page = ref(1), pageSize = ref(20), jumpPage = ref(1)
-const isPro = inject('isPro', ref(false))
 const loading = ref(false), detailVisible = ref(false), d = ref(null)
 const sites = ref([])
 const helpKey = ref('')
-const filters = reactive({ site_id: '', client_ip: '', severity: '', source: '' })
+const filters = reactive({ site_id: '', client_ip: '', action: '', category: '' })
 const totalPages = computed(() => Math.max(1, Math.ceil(total.value / pageSize.value)))
 
-function sevTxt(s) { return { critical:'严重', high:'高危', medium:'中危', low:'低危' }[s] || s }
 function fmt(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '-' }
-function siteName(log) { return log?.site_name || log?.domain || '默认站点' }
-function resetFilters() { Object.assign(filters, { site_id:'', client_ip:'', severity:'', source:'' }); page.value = 1; loadLogs() }
+function riskLevel(log) {
+  const score = Number(log?.risk_score || 0)
+  if (score >= 90) return 'critical'
+  if (score >= 60) return 'high'
+  if (score >= 30) return 'medium'
+  return 'low'
+}
+function evidence(log) { return log?.rule_id || log?.category || '本地风险事件' }
+function actionText(action) { return { block: '拦截', rate_limit: '限流', log: '仅记录', allow: '放行' }[action] || action || '放行' }
+function siteName(log) {
+  const site = sites.value.find(item => Number(item.id) === Number(log?.site_id))
+  return site?.domain || log?.host || (log?.site_id ? `站点 #${log.site_id}` : '默认站点')
+}
+function resetFilters() { Object.assign(filters, { site_id: '', client_ip: '', action: '', category: '' }); page.value = 1; loadLogs() }
 function toggleHelp(key) { helpKey.value = helpKey.value === key ? '' : key }
 function detectionExplain(log) {
   if (!log) return ''
-  const name = `${log.rule_name || log.rule_id || ''}`.toLowerCase()
-  if (log.source === 'ai') return 'AI 判断这次访问行为异常，建议结合来源 IP 和请求路径复核。'
+  const name = `${evidence(log)}`.toLowerCase()
   if (name.includes('sql') || name.includes('sqli')) return '请求里像是在尝试拼接数据库语句，可能用于读取或修改数据。'
   if (name.includes('xss')) return '请求里包含可疑脚本，可能影响访问者浏览器安全。'
   if (name.includes('cmd') || name.includes('command')) return '请求疑似尝试执行服务器命令，风险较高。'
   if (name.includes('traversal') || name.includes('path')) return '请求疑似尝试访问非公开文件或目录。'
   if (name.includes('sensitive')) return '请求访问了敏感路径或敏感文件，建议确认是否为正常业务。'
-  if (log.severity === 'critical' || log.severity === 'high') return '系统判断这次访问风险较高，建议优先查看来源和请求内容。'
+  if (Number(log.risk_score || 0) >= 60) return '系统判断这次访问风险较高，建议优先查看来源和请求内容。'
   return '系统发现异常访问特征，建议结合业务场景确认是否为正常请求。'
 }
 
 async function loadSites() {
-  if (!isPro.value) {
+  try {
+    const response = await api.get('/sites')
+    sites.value = response?.data || response || []
+  } catch {
     sites.value = []
-    filters.site_id = ''
-    return
   }
-  try { sites.value = await api.get('/sites') || [] } catch {}
 }
 
 async function loadLogs() {
   loading.value = true
   try {
-    const params = { page: page.value, limit: pageSize.value }
+    const params = { offset: (page.value - 1) * pageSize.value, page_size: pageSize.value }
     if (filters.site_id) params.site_id = filters.site_id
-    if (filters.client_ip) params.client_ip = filters.client_ip
-    if (filters.severity) params.severity = filters.severity
-    if (filters.source) params.source = filters.source
-    const res = await api.get('/logs', { params })
-    logs.value = res.data || []; total.value = res.total || 0
+    if (filters.client_ip) params.ip = filters.client_ip
+    if (filters.action) params.action = filters.action
+    if (filters.category) params.category = filters.category
+    const response = await api.get('/events', { params })
+    const data = response?.data || response || {}
+    logs.value = data.items || []
+    total.value = Number(data.total || 0)
     jumpPage.value = page.value
-  } catch {} finally { loading.value = false }
+  } catch {
+    logs.value = []
+    total.value = 0
+  } finally {
+    loading.value = false
+  }
 }
 function doJump() {
   const p = Math.min(Math.max(Number(jumpPage.value) || 1, 1), totalPages.value)
@@ -285,33 +267,6 @@ function doJump() {
   loadLogs()
 }
 function showDetail(row) { d.value = row; detailVisible.value = true; helpKey.value = '' }
-async function markReviewed() {
-  if (!d.value) return
-  try {
-    await api.post(`/logs/${d.value.id}/reviewed`)
-    ElMessage.success('已标记为有效拦截')
-    d.value.reviewed = true
-    loadLogs()
-  } catch {}
-}
-async function markFalsePositive() {
-  if (!d.value) return
-  try {
-    await ElMessageBox.confirm('确认这是误报，并将来源 IP 加入白名单学习？', '误报学习', { type: 'warning' })
-    await api.post(`/logs/${d.value.id}/false-positive`, { add_whitelist: true })
-    ElMessage.success('已标记误报，来源 IP 已加入白名单')
-    detailVisible.value = false
-    loadLogs()
-  } catch {}
-}
-watch(isPro, (value) => {
-  if (value) loadSites()
-  else {
-    sites.value = []
-    filters.site_id = ''
-  }
-})
-
 onMounted(() => { loadSites(); loadLogs() })
 </script>
 
@@ -374,8 +329,13 @@ onMounted(() => { loadSites(); loadLogs() })
   color: var(--text-secondary); font-weight: 700;
 }
 .path-cell { max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.result-cell { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.detail-link { font-size: 12px; color: var(--primary); font-weight: 600; }
+  .result-cell { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .action-chip { display: inline-flex; align-items: center; border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 700; background: #f1f5f9; color: #475569; }
+  .action-chip.action-block { background: #fef2f2; color: #dc2626; }
+  .action-chip.action-rate-limit { background: #fffbeb; color: #a16207; }
+  .action-chip.action-log { background: #eff6ff; color: #1d4ed8; }
+  .action-chip.action-allow { background: #ecfdf5; color: #047857; }
+  .detail-link { font-size: 12px; color: var(--primary); font-weight: 600; }
 
 /* Override method-tag to global colors */
 .method-tag.get { background: #eff6ff; color: #2563eb; }

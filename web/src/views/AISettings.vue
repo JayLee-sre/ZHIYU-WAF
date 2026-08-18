@@ -1,13 +1,5 @@
 <template>
-  <ProFeatureGate
-    v-if="!isPro"
-    title="AI 智能检测引擎"
-    description="接入 OpenAI 兼容模型，对规则未命中的请求进行二次分析，并将高价值样本沉淀为可复用规则。"
-    feature-key="ai"
-    :features="['AI 驱动攻击检测', 'OpenAI 兼容模型', '误报学习与规则沉淀']"
-  />
-
-  <div class="ai-page" v-else>
+  <div class="ai-page">
     <!-- 头部 -->
     <div class="ai-header">
       <div class="heading-group">
@@ -168,8 +160,8 @@
       </div>
     </div>
 
-    <!-- Pro 专属功能区 -->
-    <template v-if="isPro">
+    <!-- 高级分析与审计 -->
+    <template>
       <!-- 业务上下文 -->
       <div class="card context-card">
         <div class="card-h"><div class="card-title"><span class="dot amber"></span>业务上下文策略</div></div>
@@ -250,15 +242,10 @@
 </template>
 
 <script setup>
-import { computed, ref, reactive, inject, watch } from 'vue'
-import { useRouter } from 'vue-router'
-import { Cpu, Connection, View, Hide, SetUp, Warning, DataAnalysis } from '@element-plus/icons-vue'
+import { computed, ref, reactive, onMounted } from 'vue'
+import { Cpu, Connection, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
-import ProFeatureGate from '../components/ProFeatureGate.vue'
-
-const isPro = inject('isPro', ref(false))
-const router = useRouter()
 
 const saving = ref(false), testing = ref(false)
 const showKey = ref(false)
@@ -290,15 +277,6 @@ const kpiCards = computed(() => [
   { key: 'fp', label: '误报标记', value: aiStats.value.ai_false_positive || 0, color: '#ef4444' },
   { key: 'rev', label: '人工复核', value: aiStats.value.ai_reviewed || 0, color: '#f59e0b' },
 ])
-
-const proFeatures = [
-  { name: '无限 AI 调用', desc: '大流量站无限制使用 AI 检测', icon: DataAnalysis, color: 'indigo' },
-  { name: 'AI 详细分析报告', desc: '攻击原理、危害等级、攻击者意图解读', icon: Warning, color: 'rose' },
-  { name: '误报学习', desc: '标记误报自动调优，越用越准', icon: Cpu, color: 'violet' },
-  { name: 'AI 规则生成', desc: '自然语言描述需求，自动生成检测规则', icon: SetUp, color: 'amber' },
-  { name: '威胁画像分析', desc: 'AI 分析攻击者行为模式与趋势', icon: DataAnalysis, color: 'emerald' },
-  { name: '多模型支持', desc: 'Claude / 自定义 / 本地模型，数据不出境', icon: Connection, color: 'cyan' },
-]
 
 async function load() {
   try {
@@ -341,7 +319,6 @@ async function saveProvider(name) {
 }
 
 async function loadAIInsight() {
-  if (!isPro.value) return
   try {
     const stats = await api.get('/ai/stats', { params: { hours: 24 } })
     aiStats.value = stats || {}
@@ -351,7 +328,6 @@ async function loadAIInsight() {
 }
 
 async function loadAIHits() {
-  if (!isPro.value) return
   try {
     const res = await api.get('/logs', { params: { source: 'ai', page: aiHitPage.value, limit: 5 } })
     aiHits.value = res.data || []
@@ -360,7 +336,6 @@ async function loadAIHits() {
 }
 
 async function promoteSuggestion(item) {
-  if (!isPro.value) return
   try {
     await api.post('/ai/suggestions/promote', {
       name: `AI 建议规则：${item.path}`,
@@ -375,7 +350,6 @@ async function promoteSuggestion(item) {
 }
 
 async function markReviewed(item) {
-  if (!isPro.value) return
   try {
     await api.post(`/logs/${item.id}/reviewed`)
     ElMessage.success('已确认 AI 命中有效')
@@ -385,7 +359,6 @@ async function markReviewed(item) {
 }
 
 async function markFalsePositive(item) {
-  if (!isPro.value) return
   try {
     await ElMessageBox.confirm('确认这是 AI 误报，并将来源 IP 加入白名单学习？', 'AI 误报学习', { type: 'warning' })
     await api.post(`/logs/${item.id}/false-positive`, { add_whitelist: true, note: `AI 误报学习：${item.path}` })
@@ -411,14 +384,13 @@ function siteName(item) { return item?.site_name || item?.domain || '默认站�
 function fmt(ts) { return ts ? new Date(ts).toLocaleString('zh-CN') : '-' }
 
 function loadAll() {
-  if (!isPro.value) return
   load()
   loadUsage()
   loadAIInsight()
   loadAIHits()
 }
 
-watch(isPro, () => loadAll(), { immediate: true })
+onMounted(loadAll)
 </script>
 
 <style scoped>

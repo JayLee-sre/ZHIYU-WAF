@@ -1,13 +1,5 @@
 <template>
-  <ProFeatureGate
-    v-if="!isPro"
-    title="威胁情报联动"
-    description="自动同步恶意 IP 情报源，将高风险来源写入黑名单，并与访问控制链路联动生效。"
-    feature-key="threatintel"
-    :features="['恶意 IP 自动同步', '黑名单联动封禁', '同步审计与状态追踪']"
-  />
-
-  <div v-else class="ti-page">
+  <div class="ti-page">
     <!-- 头部 -->
     <div class="ti-header">
       <div class="heading-group">
@@ -177,14 +169,12 @@
 </template>
 
 <script setup>
-import { ref, computed, inject, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Warning, RefreshRight, Refresh, View, Hide } from '@element-plus/icons-vue'
 import { ElMessage } from 'element-plus'
 import api from '../api'
-import ProFeatureGate from '../components/ProFeatureGate.vue'
 
 const status = ref({ provider: 'abuseipdb', last_sync: null, ip_count: 0 })
-const isPro = inject('isPro', ref(false))
 const threatIPs = ref([])
 const loading = ref(false), syncing = ref(false), saving = ref(false)
 const apiKey = ref(''), showKey = ref(false)
@@ -202,7 +192,6 @@ function formatTime(ts) {
 }
 
 async function loadStatus() {
-  if (!isPro.value) return
   loading.value = true
   try {
     const res = await api.get('/threatintel/status')
@@ -213,7 +202,6 @@ async function loadStatus() {
 }
 
 async function triggerSync() {
-  if (!isPro.value) return
   syncing.value = true
   try {
     const res = await api.post('/threatintel/sync')
@@ -223,7 +211,6 @@ async function triggerSync() {
 }
 
 async function saveConfig() {
-  if (!isPro.value) return
   if (!apiKey.value.trim()) { ElMessage.warning('请输入 API Key'); return }
   saving.value = true
   try {
@@ -233,13 +220,7 @@ async function saveConfig() {
   } catch {} finally { saving.value = false }
 }
 
-watch(isPro, (value) => {
-  if (value) loadStatus()
-  else {
-    threatIPs.value = []
-    status.value = { provider: 'abuseipdb', last_sync: null, ip_count: 0 }
-  }
-}, { immediate: true })
+onMounted(loadStatus)
 </script>
 
 <style scoped>

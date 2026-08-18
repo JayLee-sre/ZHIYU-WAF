@@ -1,13 +1,5 @@
 <template>
-  <ProFeatureGate
-    v-if="!isPro"
-    title="地理访问控制"
-    description="按国家和地区管理访问来源，支持封锁与放行双策略，策略保存后实时生效。"
-    feature-key="geo"
-    :features="['国家/地区封锁', '封锁与放行策略', '无需重启实时生效']"
-  />
-
-  <div class="geo-page" v-else>
+  <div class="geo-page">
     <div class="page-toolbar">
       <div class="heading-group">
         <div class="heading-icon indigo"><el-icon :size="18"><Location /></el-icon></div>
@@ -164,13 +156,10 @@
 </template>
 
 <script setup>
-import { computed, ref, inject, watch } from 'vue'
+import { computed, ref, onMounted } from 'vue'
 import { Location } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
-import ProFeatureGate from '../components/ProFeatureGate.vue'
-
-const isPro = inject('isPro', ref(false))
 
 const rules = ref([]), loading = ref(false)
 const newAction = ref('block')
@@ -246,7 +235,6 @@ function selectCountry(name) {
 }
 
 async function loadRules() {
-  if (!isPro.value) return
   loading.value = true
   try {
     const res = await api.get('/geo/rules') || []
@@ -255,7 +243,6 @@ async function loadRules() {
 }
 
 async function addRule() {
-  if (!isPro.value) return
   const country = selectedCountry.value.trim()
   if (!country) { ElMessage.warning('请选择国家/地区'); return }
   try {
@@ -267,7 +254,6 @@ async function addRule() {
 }
 
 async function toggleRule(rule) {
-  if (!isPro.value) return
   try {
     await api.put(`/geo/rules/${rule.id}`, { country: rule.country, action: rule.action, enabled: !rule.enabled })
     ElMessage.success(rule.enabled ? '已禁用' : '已启用')
@@ -276,7 +262,6 @@ async function toggleRule(rule) {
 }
 
 async function removeRule(id) {
-  if (!isPro.value) return
   try {
     await ElMessageBox.confirm('确定删除此地理封锁规则？', '确认', { type: 'warning', confirmButtonText: '删除', cancelButtonText: '取消' })
     await api.delete(`/geo/rules/${id}`)
@@ -285,13 +270,7 @@ async function removeRule(id) {
   } catch {}
 }
 
-watch(isPro, (value) => {
-  if (value) loadRules()
-  else {
-    rules.value = []
-    selectedCountry.value = ''
-  }
-}, { immediate: true })
+onMounted(loadRules)
 </script>
 
 <style scoped>

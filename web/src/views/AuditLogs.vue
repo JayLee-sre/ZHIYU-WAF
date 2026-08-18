@@ -67,19 +67,27 @@
           <option value="">全部操作</option>
           <option value="login">登录</option>
           <option value="logout">登出</option>
-          <option value="create_rule">创建规则</option>
-          <option value="update_rule">更新规则</option>
-          <option value="delete_rule">删除规则</option>
-          <option value="add_ip">添加 IP</option>
-          <option value="remove_ip">移除 IP</option>
-          <option value="add_geo">添加地理规则</option>
-          <option value="remove_geo">移除地理规则</option>
-          <option value="update_settings">更新设置</option>
-          <option value="activate_license">激活授权</option>
-          <option value="create_user">创建用户</option>
-          <option value="delete_user">删除用户</option>
+          <option value="rule_create">创建规则</option>
+          <option value="rule_update">更新规则</option>
+          <option value="rule_delete">删除规则</option>
+          <option value="ip_add">添加 IP</option>
+          <option value="ip_remove">移除 IP</option>
+          <option value="ip_batch_import">批量导入 IP</option>
+          <option value="geo_add">添加地理规则</option>
+          <option value="geo_remove">移除地理规则</option>
+          <option value="site_create">创建站点</option>
+          <option value="site_update">更新站点</option>
+          <option value="site_delete">删除站点</option>
+          <option value="ai_provider_update">更新 AI 模型</option>
+          <option value="ai_global_update">更新 AI 全局配置</option>
+          <option value="ai_rule_promote">采纳 AI 建议规则</option>
+          <option value="user_create">创建用户</option>
+          <option value="user_delete">删除用户</option>
+          <option value="user_password_change">重置用户密码</option>
+          <option value="settings_update">更新系统设置</option>
           <option value="backup_export">备份导出</option>
           <option value="backup_import">备份导入</option>
+          <option value="cert_reload">重载证书</option>
           <option value="config_reload">配置重载</option>
         </select>
       </div>
@@ -196,23 +204,30 @@ function formatTime(ts) {
 function actionLabel(action) {
   const map = {
     login: '用户登录', logout: '用户登出',
+    rule_create: '创建检测规则', rule_update: '更新检测规则', rule_delete: '删除检测规则',
+    ip_add: '添加 IP 记录', ip_remove: '移除 IP 记录', ip_batch_import: '批量导入 IP',
+    geo_add: '添加地理封锁规则', geo_remove: '移除地理封锁规则',
+    site_create: '创建站点', site_update: '更新站点', site_delete: '删除站点',
+    ai_provider_update: '更新 AI 模型', ai_global_update: '更新 AI 全局配置', ai_rule_promote: '采纳 AI 建议规则',
+    user_create: '创建用户', user_delete: '删除用户', user_password_change: '重置用户密码',
+    settings_update: '更新系统设置',
+    backup_export: '备份导出', backup_import: '备份导入',
+    cert_reload: '重载证书', config_reload: '配置重载',
     create_rule: '创建检测规则', update_rule: '更新检测规则', delete_rule: '删除检测规则',
     add_ip: '添加 IP 记录', remove_ip: '移除 IP 记录',
     add_geo: '添加地理封锁规则', remove_geo: '移除地理封锁规则',
-    update_settings: '更新系统设置', activate_license: '激活授权',
+    update_settings: '更新系统设置',
     create_user: '创建用户', delete_user: '删除用户',
-    backup_export: '备份导出', backup_import: '备份导入',
-    config_reload: '配置重载',
   }
   return map[action] || action
 }
 
 function getActionClass(action) {
   if (['login', 'logout'].includes(action)) return 'auth'
-  if (['create_rule', 'update_rule', 'delete_rule'].includes(action)) return 'rule'
-  if (['add_ip', 'remove_ip'].includes(action)) return 'ip'
-  if (['add_geo', 'remove_geo'].includes(action)) return 'geo'
-  if (['create_user', 'delete_user'].includes(action)) return 'user'
+  if (['rule_create', 'rule_update', 'rule_delete', 'create_rule', 'update_rule', 'delete_rule'].includes(action)) return 'rule'
+  if (['ip_add', 'ip_remove', 'ip_batch_import', 'add_ip', 'remove_ip'].includes(action)) return 'ip'
+  if (['geo_add', 'geo_remove', 'add_geo', 'remove_geo'].includes(action)) return 'geo'
+  if (['user_create', 'user_delete', 'user_password_change', 'create_user', 'delete_user'].includes(action)) return 'user'
   if (['backup_export', 'backup_import'].includes(action)) return 'backup'
   return 'system'
 }

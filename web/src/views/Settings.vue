@@ -1,242 +1,248 @@
 <template>
   <div class="settings-page">
-    <!-- 页面头部 -->
-    <div class="page-header">
-      <div class="header-left">
-        <div class="page-icon slate">
-          <el-icon :size="20"><Setting /></el-icon>
+    <header class="settings-hero">
+      <div class="hero-copy">
+        <p class="eyebrow">SYSTEM CONTROL</p>
+        <div class="hero-title-row">
+          <div class="hero-icon"><el-icon :size="21"><Setting /></el-icon></div>
+          <div>
+            <h1>系统设置</h1>
+            <p>集中管理防护开关、控制台访问、本地配置与恢复流程。</p>
+          </div>
         </div>
-        <div>
-          <h1 class="page-title">系统设置</h1>
-          <p class="page-desc">管理防护、密码和本地系统运维配置</p>
+        <div class="hero-tags" aria-label="系统能力状态">
+          <span class="hero-tag good"><el-icon :size="14"><CircleCheck /></el-icon> V2 全功能免费</span>
+          <span class="hero-tag">本地优先</span>
+          <span class="hero-tag">配置可回滚</span>
         </div>
       </div>
-      <button class="btn-outline" :disabled="loadingHealth" @click="loadHealth">
-        <el-icon :size="14"><RefreshRight /></el-icon>
-        {{ loadingHealth ? '加载中' : '刷新' }}
+      <button class="refresh-button" :disabled="loadingHealth" @click="loadHealth">
+        <el-icon :size="15"><RefreshRight /></el-icon>
+        {{ loadingHealth ? '同步中…' : '刷新状态' }}
       </button>
-    </div>
+    </header>
 
-    <div class="free-features-note">
-      <el-icon :size="16"><CircleCheck /></el-icon>
-      <span>V2 已开放全部功能，无需授权码或联网激活。</span>
-    </div>
+    <section class="status-strip" aria-label="系统状态概览">
+      <article class="status-item">
+        <span class="status-kicker">运行状态</span>
+        <strong><i class="status-dot" :class="healthTone"></i>{{ healthLabel }}</strong>
+        <small>{{ healthHint }}</small>
+      </article>
+      <article class="status-item">
+        <span class="status-kicker">动态防护</span>
+        <strong>{{ settingsForm.dynamicProtect ? '已启用' : '未启用' }}</strong>
+        <small>{{ settingsForm.dynamicProtect ? '随机化脚本注入正在生效' : '可在防护策略中随时开启' }}</small>
+      </article>
+      <article class="status-item">
+        <span class="status-kicker">控制台账户</span>
+        <strong>{{ users.length }} 个</strong>
+        <small>{{ adminCount ? `${adminCount} 个管理员 · 最小权限可控` : '根管理员与角色账户分离管理' }}</small>
+      </article>
+    </section>
 
-    <!-- 两列布局 -->
-    <div class="settings-grid">
-      <!-- 管理员密码 -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title-group">
-            <div class="panel-icon amber">
-              <el-icon :size="16"><Key /></el-icon>
+    <main class="settings-layout">
+      <div class="settings-main">
+        <section class="workspace-card protection-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">PROTECTION</p>
+              <h2>防护策略</h2>
+              <span>调整对业务请求生效的本地保护选项。</span>
             </div>
-            <h2>管理员密码</h2>
+            <span class="card-state">即时配置</span>
           </div>
-        </div>
-        <div class="panel-body">
-          <div class="field">
-            <label>当前密码</label>
-            <div class="password-input">
-              <input v-model="pwdForm.old_password" :type="showOld ? 'text' : 'password'" autocomplete="current-password" placeholder="输入当前密码" />
-              <button type="button" class="toggle-vis" @click="showOld = !showOld">
-                <el-icon :size="14"><View v-if="!showOld" /><Hide v-else /></el-icon>
-              </button>
-            </div>
-          </div>
-          <div class="field">
-            <label>新密码</label>
-            <div class="password-input">
-              <input v-model="pwdForm.new_password" :type="showNew ? 'text' : 'password'" autocomplete="new-password" placeholder="至少 12 位字符" />
-              <button type="button" class="toggle-vis" @click="showNew = !showNew">
-                <el-icon :size="14"><View v-if="!showNew" /><Hide v-else /></el-icon>
-              </button>
-            </div>
-          </div>
-          <div class="field">
-            <label>确认密码</label>
-            <div class="password-input">
-              <input v-model="pwdConfirm" :type="showConfirm ? 'text' : 'password'" autocomplete="new-password" placeholder="再次输入新密码" />
-              <button type="button" class="toggle-vis" @click="showConfirm = !showConfirm">
-                <el-icon :size="14"><View v-if="!showConfirm" /><Hide v-else /></el-icon>
-              </button>
-            </div>
-          </div>
-          <button class="btn-primary" :disabled="changingPwd" @click="changePassword">
-            {{ changingPwd ? '更新中...' : '更新密码' }}
-          </button>
-        </div>
-      </div>
 
-      <!-- 协议与防护 -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title-group">
-            <div class="panel-icon emerald">
-              <el-icon :size="16"><Setting /></el-icon>
-            </div>
-            <h2>协议与防护</h2>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="toggle-card">
-            <div class="toggle-info">
-              <strong>HTTP/2 协议</strong>
-              <span>启用后通过 TLS ALPN 自动协商 HTTP/2，提升传输性能</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" v-model="settingsForm.http2" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <div class="toggle-card">
-            <div class="toggle-info">
-              <strong>动态防护</strong>
-              <span>每次请求注入随机化脚本，防止爬虫和自动化工具分析</span>
-            </div>
-            <label class="switch">
-              <input type="checkbox" v-model="settingsForm.dynamicProtect" />
-              <span class="slider"></span>
-            </label>
-          </div>
-          <button class="btn-primary" :disabled="savingSettings" @click="saveSettings">
-            {{ savingSettings ? '保存中...' : '保存设置' }}
-          </button>
-        </div>
-      </div>
-
-      <!-- 运维操作 -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title-group">
-            <div class="panel-icon rose">
-              <el-icon :size="16"><RefreshRight /></el-icon>
-            </div>
-            <h2>运维操作</h2>
-          </div>
-        </div>
-        <div class="panel-body">
-          <div class="ops-info">
-            <p>重载配置会重新读取本地配置、规则和授权状态，不会清空数据或重启服务。</p>
-          </div>
-          <div class="ops-grid">
-            <div class="ops-card">
-              <div class="ops-card-icon">
-                <el-icon :size="18"><RefreshRight /></el-icon>
+          <div class="policy-list">
+            <div class="policy-row">
+              <div class="policy-mark shield-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3 4.5 6v5.5c0 4.6 3.2 7.9 7.5 9.5 4.3-1.6 7.5-4.9 7.5-9.5V6L12 3Z"/><path d="M8.5 12h7M12 8.5v7"/></svg>
               </div>
-              <div class="ops-card-info">
-                <strong>重载配置</strong>
-                <span>修改配置后手动生效</span>
+              <div class="policy-copy">
+                <strong>动态防护</strong>
+                <p>为请求注入随机化脚本，降低自动化工具与爬虫的分析效率。</p>
               </div>
-              <button class="btn-secondary" :disabled="reloading" @click="reloadConfig">
-                {{ reloading ? '重载中' : '重载' }}
-              </button>
+              <label class="switch" :aria-label="settingsForm.dynamicProtect ? '关闭动态防护' : '开启动态防护'">
+                <input type="checkbox" v-model="settingsForm.dynamicProtect" />
+                <span class="switch-track"></span>
+              </label>
             </div>
-            <div class="ops-card">
-              <div class="ops-card-icon dark">
-                <el-icon :size="18"><RefreshRight /></el-icon>
+            <div class="policy-row policy-row-muted">
+              <div class="policy-mark protocol-mark">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 10h5M7 14h10"/></svg>
               </div>
-              <div class="ops-card-info">
-                <strong>版本更新</strong>
-                <span>检查并安装新版本</span>
+              <div class="policy-copy">
+                <strong>HTTP/2 协商</strong>
+                <p>通过 TLS ALPN 由监听器自动协商协议；请在证书与反向代理侧统一配置。</p>
               </div>
-              <button class="btn-dark" :disabled="checkingUpdate" @click="checkVersionUpdate">
-                {{ checkingUpdate ? '检查中' : '检查' }}
-              </button>
+              <span class="neutral-chip">自动协商</span>
             </div>
           </div>
-        </div>
-      </div>
 
-      <!-- 备份与恢复 -->
-      <div class="panel">
-        <div class="panel-head">
-          <div class="panel-title-group">
-            <div class="panel-icon violet">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-            </div>
-            <h2>备份与恢复</h2>
-          </div>
-        </div>
-        <div class="panel-body">
-          <p class="section-desc">导出或导入系统配置（规则、IP 列表、站点、地理围栏和设置）</p>
-          <div class="backup-row">
-            <button class="btn-primary" :disabled="exporting" @click="exportBackup">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
-              {{ exporting ? '导出中...' : '导出配置' }}
+          <div class="card-action-row">
+            <p>保存后会立即重载本地配置，不会清空数据或重启服务。</p>
+            <button class="primary-button compact" :disabled="savingSettings" @click="saveSettings">
+              {{ savingSettings ? '保存中…' : '保存防护策略' }}
             </button>
-            <label class="btn-outline-primary">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="15" height="15"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-              {{ importing ? '导入中...' : '导入配置' }}
-              <input type="file" accept=".json" @change="importBackup" :disabled="importing" hidden />
-            </label>
           </div>
+        </section>
+
+        <section class="workspace-card lifecycle-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">LIFECYCLE</p>
+              <h2>配置与运维</h2>
+              <span>只对本地文件、规则和运行状态执行受控操作。</span>
+            </div>
+          </div>
+
+          <div class="operation-grid">
+            <article class="operation-tile">
+              <div class="tile-top">
+                <span class="tile-icon blue"><el-icon :size="17"><RefreshRight /></el-icon></span>
+                <span class="operation-label">无需重启</span>
+              </div>
+              <h3>重载配置</h3>
+              <p>重新读取本地配置与规则，并同步当前防护状态。</p>
+              <button class="secondary-button" :disabled="reloading" @click="reloadConfig">
+                {{ reloading ? '重载中…' : '立即重载' }}
+              </button>
+            </article>
+            <article class="operation-tile muted-tile">
+              <div class="tile-top">
+                <span class="tile-icon slate">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 3v12"/><path d="m8 7 4-4 4 4"/><path d="M5 15v4a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4"/></svg>
+                </span>
+                <span class="operation-label neutral">服务预留</span>
+              </div>
+              <h3>更新检查</h3>
+              <p>在线更新通道尚未接入；可检查当前服务是否已提供该能力。</p>
+              <button class="secondary-button neutral-action" :disabled="checkingUpdate" @click="checkVersionUpdate">
+                {{ checkingUpdate ? '检查中…' : '检查服务' }}
+              </button>
+            </article>
+          </div>
+        </section>
+
+        <section class="workspace-card backup-card">
+          <div class="card-heading">
+            <div>
+              <p class="card-kicker">BACKUP &amp; RECOVERY</p>
+              <h2>配置备份与恢复</h2>
+              <span>导出或导入规则、IP 列表、站点、地理围栏与系统设置。</span>
+            </div>
+          </div>
+
+          <div class="backup-content">
+            <div class="backup-visual">
+              <svg viewBox="0 0 52 52" fill="none" stroke="currentColor" stroke-width="1.55"><path d="M14 7h18l9 9v27a3 3 0 0 1-3 3H14a3 3 0 0 1-3-3V10a3 3 0 0 1 3-3Z"/><path d="M32 7v10h10M17 27h18M17 34h11"/><path d="m29 22 3-3 3 3M32 19v10"/></svg>
+            </div>
+            <div class="backup-copy">
+              <strong>安全地迁移本地控制面</strong>
+              <p>备份文件采用 JSON 格式，建议在更新规则或迁移主机前完成一次导出，并在非生产环境先验证恢复结果。</p>
+              <div class="backup-actions">
+                <button class="primary-button" :disabled="exporting" @click="exportBackup">
+                  {{ exporting ? '导出中…' : '导出配置' }}
+                </button>
+                <label class="secondary-button upload-button" :class="{ disabled: importing }">
+                  {{ importing ? '导入中…' : '导入备份' }}
+                  <input type="file" accept=".json" @change="importBackup" :disabled="importing" hidden />
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div class="import-result" v-if="importResult">
+            <div class="result-heading"><el-icon :size="14"><CircleCheck /></el-icon> 导入结果</div>
             <div class="import-summary">
-              <span v-for="(count, key) in importResult.imported" :key="key">
-                {{ importLabel(key) }}: {{ count }}
-              </span>
+              <span v-for="(count, key) in importResult.imported" :key="key">{{ importLabel(key) }} {{ count }}</span>
             </div>
             <div class="import-errors" v-if="importResult.errors?.length">
               <div v-for="err in importResult.errors" :key="err" class="error-line">{{ err }}</div>
             </div>
           </div>
-        </div>
+        </section>
       </div>
 
-      <!-- 用户管理 -->
-      <div class="panel full-width">
-        <div class="panel-head">
-          <div class="panel-title-group">
-            <div class="panel-icon cyan">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+      <aside class="settings-side">
+        <section class="workspace-card password-card">
+          <div class="card-heading tight">
+            <div>
+              <p class="card-kicker">ACCOUNT SECURITY</p>
+              <h2>管理员密码</h2>
+              <span>建议使用独立、高强度密码。</span>
             </div>
-            <h2>用户管理</h2>
+            <span class="tile-icon amber"><el-icon :size="16"><Key /></el-icon></span>
           </div>
-          <button class="btn-sm" @click="showCreateUser = !showCreateUser">
-            <el-icon :size="12"><Plus /></el-icon>
-            {{ showCreateUser ? '收起' : '新建用户' }}
-          </button>
-        </div>
-        <div class="panel-body">
-          <!-- 创建用户表单 -->
-          <div class="create-user-form" v-if="showCreateUser">
-            <div class="form-row-3">
-              <input v-model="newUser.username" class="form-input" placeholder="用户名" />
-              <input v-model="newUser.password" type="password" class="form-input" placeholder="密码（至少 12 位）" />
-              <select v-model="newUser.role" class="form-select">
-                <option value="operator">操作员</option>
-                <option value="viewer">只读用户</option>
-                <option value="admin">管理员</option>
-              </select>
-            </div>
-            <button class="btn-primary" :disabled="creatingUser || !newUser.username || !newUser.password" @click="createUser">
-              {{ creatingUser ? '创建中...' : '创建用户' }}
+          <div class="password-fields">
+            <label class="input-field">
+              <span>当前密码</span>
+              <div class="password-input">
+                <input v-model="pwdForm.old_password" :type="showOld ? 'text' : 'password'" autocomplete="current-password" placeholder="输入当前密码" />
+                <button type="button" class="toggle-vis" @click="showOld = !showOld" aria-label="显示或隐藏当前密码"><el-icon :size="14"><View v-if="!showOld" /><Hide v-else /></el-icon></button>
+              </div>
+            </label>
+            <label class="input-field">
+              <span>新密码</span>
+              <div class="password-input">
+                <input v-model="pwdForm.new_password" :type="showNew ? 'text' : 'password'" autocomplete="new-password" placeholder="至少 12 位字符" />
+                <button type="button" class="toggle-vis" @click="showNew = !showNew" aria-label="显示或隐藏新密码"><el-icon :size="14"><View v-if="!showNew" /><Hide v-else /></el-icon></button>
+              </div>
+            </label>
+            <label class="input-field">
+              <span>确认新密码</span>
+              <div class="password-input">
+                <input v-model="pwdConfirm" :type="showConfirm ? 'text' : 'password'" autocomplete="new-password" placeholder="再次输入新密码" />
+                <button type="button" class="toggle-vis" @click="showConfirm = !showConfirm" aria-label="显示或隐藏确认密码"><el-icon :size="14"><View v-if="!showConfirm" /><Hide v-else /></el-icon></button>
+              </div>
+            </label>
+            <button class="primary-button full" :disabled="changingPwd" @click="changePassword">
+              {{ changingPwd ? '更新中…' : '更新管理员密码' }}
             </button>
           </div>
+        </section>
 
-          <!-- 用户列表 -->
-          <div class="user-grid">
-            <div class="user-card" v-for="u in users" :key="u.id">
-              <div class="user-avatar" :class="u.role">
-                {{ u.username.charAt(0).toUpperCase() }}
-              </div>
-              <div class="user-info">
-                <strong>{{ u.username }}</strong>
-                <span class="role-badge" :class="u.role">{{ roleLabel(u.role) }}</span>
-              </div>
-              <button class="btn-text-danger" @click="deleteUser(u)" :disabled="u.role === 'admin' && adminCount <= 1">
-                删除
-              </button>
+        <section class="workspace-card users-card">
+          <div class="card-heading tight">
+            <div>
+              <p class="card-kicker">ACCESS CONTROL</p>
+              <h2>用户与角色</h2>
+              <span>为日常运维分配最小必要权限。</span>
             </div>
-            <div class="empty-mini" v-if="!users.length">
-              <span>暂无用户数据</span>
-            </div>
+            <button class="text-button" @click="showCreateUser = !showCreateUser"><el-icon :size="13"><Plus /></el-icon>{{ showCreateUser ? '收起' : '添加用户' }}</button>
           </div>
-        </div>
-      </div>
 
-    </div>
+          <div class="create-user-form" v-if="showCreateUser">
+            <input v-model="newUser.username" class="form-input" placeholder="用户名" />
+            <input v-model="newUser.password" type="password" class="form-input" placeholder="密码（至少 12 位）" />
+            <select v-model="newUser.role" class="form-select">
+              <option value="operator">操作员</option>
+              <option value="viewer">只读用户</option>
+              <option value="admin">管理员</option>
+            </select>
+            <button class="primary-button full" :disabled="creatingUser || !newUser.username || !newUser.password" @click="createUser">{{ creatingUser ? '创建中…' : '创建用户' }}</button>
+          </div>
+
+          <div class="user-list" v-if="users.length">
+            <article class="user-row" v-for="u in users" :key="u.id">
+              <span class="user-avatar" :class="u.role">{{ u.username.charAt(0).toUpperCase() }}</span>
+              <div class="user-copy"><strong>{{ u.username }}</strong><span class="role-badge" :class="u.role">{{ roleLabel(u.role) }}</span></div>
+              <button class="remove-user" @click="deleteUser(u)" :disabled="u.role === 'admin' && adminCount <= 1">删除</button>
+            </article>
+          </div>
+          <div class="empty-users" v-else>暂无额外控制台用户。</div>
+        </section>
+
+        <section class="guidance-card">
+          <p class="card-kicker">OPERATING NOTE</p>
+          <strong>推荐变更顺序</strong>
+          <ol>
+            <li>先导出当前配置并保留恢复点。</li>
+            <li>修改策略后执行重载并观察安全态势。</li>
+            <li>为团队成员创建最小权限账户。</li>
+          </ol>
+        </section>
+      </aside>
+    </main>
   </div>
 </template>
 
@@ -257,7 +263,7 @@ const checkingUpdate = ref(false)
 const savingSettings = ref(false)
 const pwdForm = reactive({ old_password: '', new_password: '' })
 const pwdConfirm = ref('')
-const settingsForm = reactive({ http2: false, dynamicProtect: false })
+const settingsForm = reactive({ dynamicProtect: false })
 
 const exporting = ref(false)
 const importing = ref(false)
@@ -268,6 +274,10 @@ const showCreateUser = ref(false)
 const creatingUser = ref(false)
 const newUser = reactive({ username: '', password: '', role: 'operator' })
 const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
+const healthTone = computed(() => health.value?.status === 'ok' ? 'ok' : health.value?.status ? 'warning' : 'muted')
+const healthLabel = computed(() => health.value?.status === 'ok' ? '系统正常' : health.value?.status ? '需要关注' : '等待状态同步')
+const healthHint = computed(() => health.value?.status === 'ok' ? '本地控制面与服务健康检查可用' : '可使用刷新状态重新获取服务信息')
+
 async function loadHealth() {
   loadingHealth.value = true
   try {
@@ -276,9 +286,7 @@ async function loadHealth() {
       api.get('/settings', { suppressError: true }),
     ])
     health.value = h || {}
-    if (settings) {
-      settingsForm.dynamicProtect = settings.dynamic_protect === 'true'
-    }
+    if (settings) settingsForm.dynamicProtect = settings.dynamic_protect === 'true'
   } catch {
     health.value = {}
   } finally {
@@ -287,18 +295,9 @@ async function loadHealth() {
 }
 
 async function changePassword() {
-  if (!pwdForm.old_password || !pwdForm.new_password || !pwdConfirm.value) {
-    ElMessage.warning('请填写完整密码')
-    return
-  }
-  if (pwdForm.new_password.length < 12) {
-    ElMessage.warning('新密码至少 12 位字符')
-    return
-  }
-  if (pwdForm.new_password !== pwdConfirm.value) {
-    ElMessage.warning('两次输入的新密码不一致')
-    return
-  }
+  if (!pwdForm.old_password || !pwdForm.new_password || !pwdConfirm.value) return ElMessage.warning('请填写完整密码')
+  if (pwdForm.new_password.length < 12) return ElMessage.warning('新密码至少 12 位字符')
+  if (pwdForm.new_password !== pwdConfirm.value) return ElMessage.warning('两次输入的新密码不一致')
   changingPwd.value = true
   try {
     await api.post('/auth/password', pwdForm)
@@ -315,8 +314,8 @@ async function reloadConfig() {
   if (reloading.value) return
   reloading.value = true
   try {
-    const r = await api.post('/config/reload')
-    ElMessage.success(r.message || '配置已重载')
+    const response = await api.post('/config/reload')
+    ElMessage.success(response.message || '配置已重载')
     await loadHealth()
   } finally {
     reloading.value = false
@@ -326,10 +325,8 @@ async function reloadConfig() {
 async function saveSettings() {
   savingSettings.value = true
   try {
-    await api.put('/settings', {
-      dynamic_protect: String(settingsForm.dynamicProtect),
-    })
-    ElMessage.success('设置已保存')
+    await api.put('/settings', { dynamic_protect: String(settingsForm.dynamicProtect) })
+    ElMessage.success('防护策略已保存')
     await reloadConfig()
   } finally {
     savingSettings.value = false
@@ -341,33 +338,24 @@ async function checkVersionUpdate() {
   checkingUpdate.value = true
   try {
     await api.post('/system/update/check', {}, { suppressError: true })
-    ElMessage.success('已提交版本检查请求')
+    ElMessage.success('已提交更新服务检查请求')
   } catch {
-    ElMessage.info('版本更新接口已预留，当前版本暂未接入在线更新服务')
+    ElMessage.info('在线更新服务尚未接入；请通过受控发布流程升级。')
   } finally {
     checkingUpdate.value = false
   }
 }
 
-function formatDateTime(value) {
-  if (!value) return '-'
-  const d = new Date(value)
-  if (Number.isNaN(d.getTime())) return value
-  return d.toLocaleDateString('zh-CN')
-}
-
 async function exportBackup() {
   exporting.value = true
   try {
-    const resp = await fetch('/api/v1/backup/export', {
-      headers: { Authorization: `Bearer ${localStorage.getItem('zhiyu_waf_token')}` },
-    })
-    const blob = await resp.json()
-    const url = URL.createObjectURL(new Blob([JSON.stringify(blob, null, 2)], { type: 'application/json' }))
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `zhiyu-waf-backup-${new Date().toISOString().slice(0, 10)}.json`
-    a.click()
+    const response = await fetch('/api/v1/backup/export', { headers: { Authorization: `Bearer ${localStorage.getItem('zhiyu_waf_token')}` } })
+    const backup = await response.json()
+    const url = URL.createObjectURL(new Blob([JSON.stringify(backup, null, 2)], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `zhiyu-waf-backup-${new Date().toISOString().slice(0, 10)}.json`
+    link.click()
     URL.revokeObjectURL(url)
     ElMessage.success('配置已导出')
   } finally {
@@ -375,32 +363,25 @@ async function exportBackup() {
   }
 }
 
-async function importBackup(e) {
-  const file = e.target.files?.[0]
+async function importBackup(event) {
+  const file = event.target.files?.[0]
   if (!file) return
   importing.value = true
   importResult.value = null
   try {
-    const text = await file.text()
-    const data = JSON.parse(text)
+    const data = JSON.parse(await file.text())
     const result = await api.post('/backup/import', data)
     importResult.value = result
-    if (result.errors?.length) {
-      ElMessage.warning(`导入完成，${result.errors.length} 个错误`)
-    } else {
-      ElMessage.success('配置已导入')
-    }
-  } catch (err) {
-    ElMessage.error('导入失败: ' + (err.message || '未知错误'))
+    result.errors?.length ? ElMessage.warning(`导入完成，${result.errors.length} 个错误`) : ElMessage.success('配置已导入')
+  } catch (error) {
+    ElMessage.error('导入失败: ' + (error.message || '未知错误'))
   } finally {
     importing.value = false
-    e.target.value = ''
+    event.target.value = ''
   }
 }
 
-function importLabel(key) {
-  return { rules: '规则', ip_entries: 'IP', sites: '站点', geo_rules: '地理围栏', settings: '设置' }[key] || key
-}
+function importLabel(key) { return { rules: '规则', ip_entries: 'IP', sites: '站点', geo_rules: '地理围栏', settings: '设置' }[key] || key }
 
 async function loadUsers() {
   try { users.value = await api.get('/users') || [] } catch { users.value = [] }
@@ -422,20 +403,16 @@ async function createUser() {
   }
 }
 
-async function deleteUser(u) {
+async function deleteUser(user) {
+  try { await ElMessageBox.confirm(`确定删除用户 "${user.username}"？`, '删除确认', { type: 'warning' }) } catch { return }
   try {
-    await ElMessageBox.confirm(`确定删除用户 "${u.username}"？`, '删除确认', { type: 'warning' })
-  } catch { return }
-  try {
-    await api.delete(`/users/${u.id}`)
+    await api.delete(`/users/${user.id}`)
     ElMessage.success('用户已删除')
     await loadUsers()
   } catch {}
 }
 
-function roleLabel(role) {
-  return { admin: '管理员', operator: '操作员', viewer: '只读' }[role] || role
-}
+function roleLabel(role) { return { admin: '管理员', operator: '操作员', viewer: '只读' }[role] || role }
 
 onMounted(async () => {
   await loadHealth()
@@ -444,636 +421,14 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-.settings-page {
-  max-width: 1200px;
-  display: flex;
-  flex-direction: column;
-  gap: 18px;
-}
-
-/* ===== 页面头部 ===== */
-.page-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-}
-.page-icon {
-  width: 42px; height: 42px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.page-icon.slate { background: #f1f5f9; color: #475569; }
-.page-title {
-  font-size: 20px;
-  font-weight: 800;
-  color: #0f172a;
-  margin: 0;
-  letter-spacing: -0.3px;
-}
-.page-desc {
-  font-size: 13px;
-  color: #94a3b8;
-  margin: 2px 0 0;
-}
-.btn-outline {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 16px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  color: #475569;
-  transition: all 0.2s;
-}
-.btn-outline:hover { border-color: #6366f1; color: #6366f1; }
-.btn-outline:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.upgrade-notice {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  border: 1px solid #bfdbfe;
-  border-radius: 12px;
-  background: #eff6ff;
-  color: #1d4ed8;
-}
-.upgrade-notice-icon {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  background: #dbeafe;
-}
-.upgrade-notice strong {
-  display: block;
-  font-size: 14px;
-  color: #1e3a8a;
-  margin-bottom: 3px;
-}
-.upgrade-notice span {
-  display: block;
-  font-size: 12.5px;
-  line-height: 1.6;
-}
-
-/* ===== 面板通用 ===== */
-.panel {
-  background: #fff;
-  border: 1px solid #eef0f4;
-  border-radius: 14px;
-  overflow: hidden;
-  box-shadow: 0 1px 3px rgba(0,0,0,.03);
-}
-.panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid #f1f5f9;
-}
-.panel-title-group {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.panel-icon {
-  width: 32px; height: 32px;
-  border-radius: 9px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.panel-icon.indigo { background: #eef2ff; color: #6366f1; }
-.panel-icon.amber { background: #fffbeb; color: #d97706; }
-.panel-icon.emerald { background: #ecfdf5; color: #10b981; }
-.panel-icon.rose { background: #fff1f2; color: #ef4444; }
-.panel-icon.violet { background: #f5f3ff; color: #7c3aed; }
-.panel-icon.cyan { background: #ecfeff; color: #0891b2; }
-.panel-head h2 {
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: #0f172a;
-}
-.panel-body {
-  padding: 20px;
-}
-.edition-badge {
-  padding: 4px 12px;
-  border-radius: 20px;
-  background: #f1f5f9;
-  color: #94a3b8;
-  font-size: 12px;
-  font-weight: 800;
-}
-.edition-badge.pro { background: #ecfdf5; color: #10b981; }
-
-/* ===== 授权面板 ===== */
-.license-panel { }
-.license-body { padding: 20px; }
-.license-status-card {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 20px;
-  border-radius: 12px;
-  background: #f8f9fc;
-  border: 1px solid #eef0f4;
-  flex-wrap: wrap;
-}
-.license-status-card.active {
-  background: #f0fdf4;
-  border-color: #bbf7d0;
-}
-.license-status-icon {
-  width: 52px; height: 52px;
-  border-radius: 14px;
-  background: #e2e8f0;
-  color: #64748b;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.license-status-card.active .license-status-icon {
-  background: #dcfce7;
-  color: #16a34a;
-}
-.license-status-info {
-  flex: 1;
-  min-width: 200px;
-}
-.license-status-info strong {
-  display: block;
-  font-size: 16px;
-  color: #0f172a;
-}
-.license-status-info span {
-  display: block;
-  font-size: 12.5px;
-  color: #64748b;
-  margin-top: 3px;
-}
-.license-metrics-row {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 10px;
-  width: 100%;
-  margin-top: 8px;
-}
-.license-metric {
-  padding: 12px 14px;
-  background: #fff;
-  border-radius: 10px;
-  border: 1px solid #eef0f4;
-}
-.metric-label {
-  display: block;
-  font-size: 11px;
-  color: #94a3b8;
-  font-weight: 600;
-  margin-bottom: 4px;
-}
-.metric-value {
-  display: block;
-  font-size: 14px;
-  color: #0f172a;
-  font-weight: 700;
-}
-
-.activate-section {
-  margin-top: 16px;
-}
-.activate-hint {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: #eef2ff;
-  border-radius: 10px;
-  color: #4338ca;
-  font-size: 12.5px;
-  font-weight: 500;
-  margin-bottom: 12px;
-}
-.activate-form {
-  display: flex;
-  gap: 10px;
-}
-.activate-input {
-  flex: 1;
-  height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 0 14px;
-  font-size: 13px;
-  outline: none;
-  transition: all 0.2s;
-  background: #f8f9fc;
-}
-.activate-input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
-  background: #fff;
-}
-.activate-btn {
-  height: 40px;
-  padding: 0 24px;
-  border: none;
-  border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1, #8b5cf6);
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-.activate-btn:hover { box-shadow: 0 4px 12px rgba(99,102,241,.3); }
-.activate-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-
-/* ===== 设置网格 ===== */
-.settings-grid {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 18px;
-  align-items: start;
-}
-.full-width { grid-column: 1 / -1; }
-
-/* ===== 字段 ===== */
-.field {
-  margin-bottom: 14px;
-}
-.field:last-of-type { margin-bottom: 18px; }
-.field label {
-  display: block;
-  font-size: 12px;
-  font-weight: 700;
-  color: #475569;
-  margin-bottom: 6px;
-}
-.password-input {
-  position: relative;
-}
-.password-input input {
-  width: 100%;
-  height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 0 40px 0 14px;
-  font-size: 13px;
-  outline: none;
-  transition: all 0.2s;
-  background: #f8f9fc;
-  color: #0f172a;
-}
-.password-input input:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
-  background: #fff;
-}
-.password-input input::placeholder { color: #94a3b8; }
-.toggle-vis {
-  position: absolute;
-  right: 8px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 28px; height: 28px;
-  border: none;
-  border-radius: 6px;
-  background: transparent;
-  color: #94a3b8;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-}
-.toggle-vis:hover { color: #475569; }
-
-/* ===== 按钮 ===== */
-.btn-primary {
-  width: 100%;
-  height: 40px;
-  border: none;
-  border-radius: 10px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-}
-.btn-primary:hover { background: #4f46e5; }
-.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-secondary {
-  height: 36px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 9px;
-  background: #6366f1;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-.btn-secondary:hover { background: #4f46e5; }
-.btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-dark {
-  height: 36px;
-  padding: 0 16px;
-  border: none;
-  border-radius: 9px;
-  background: #0f172a;
-  color: #fff;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-.btn-dark:hover { background: #1e293b; }
-.btn-dark:disabled { opacity: 0.5; cursor: not-allowed; }
-
-.btn-sm {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 12px;
-  border-radius: 8px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #6366f1;
-  font-size: 12px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-sm:hover { background: #eef2ff; }
-
-.btn-outline-primary {
-  flex: 1;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border-radius: 10px;
-  border: 1px solid #e2e8f0;
-  background: #fff;
-  color: #475569;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-.btn-outline-primary:hover { border-color: #6366f1; color: #6366f1; }
-
-.btn-text-danger {
-  border: none;
-  background: none;
-  color: #ef4444;
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  padding: 4px 8px;
-  border-radius: 6px;
-  transition: all 0.2s;
-}
-.btn-text-danger:hover { background: #fff1f2; }
-.btn-text-danger:disabled { opacity: 0.3; cursor: not-allowed; }
-
-/* ===== Toggle ===== */
-.toggle-card {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 14px 16px;
-  background: #f8f9fc;
-  border-radius: 10px;
-  border: 1px solid #eef0f4;
-  margin-bottom: 12px;
-}
-.toggle-card:last-of-type { margin-bottom: 18px; }
-.toggle-info { flex: 1; min-width: 0; }
-.toggle-info strong { display: block; font-size: 13.5px; color: #0f172a; }
-.toggle-info span { display: block; font-size: 12px; color: #94a3b8; margin-top: 2px; }
-
-.switch {
-  position: relative;
-  width: 44px; height: 24px;
-  flex-shrink: 0;
-}
-.switch input { opacity: 0; width: 0; height: 0; }
-.slider {
-  position: absolute;
-  cursor: pointer;
-  inset: 0;
-  background: #cbd5e1;
-  border-radius: 24px;
-  transition: 0.3s;
-}
-.slider:before {
-  content: "";
-  position: absolute;
-  height: 18px; width: 18px;
-  left: 3px; bottom: 3px;
-  background: #fff;
-  border-radius: 50%;
-  transition: 0.3s;
-}
-.switch input:checked + .slider { background: #6366f1; }
-.switch input:checked + .slider:before { transform: translateX(20px); }
-
-/* ===== 运维 ===== */
-.ops-info p {
-  margin: 0 0 14px;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.6;
-}
-.ops-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-.ops-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: #f8f9fc;
-  border-radius: 10px;
-  border: 1px solid #eef0f4;
-}
-.ops-card-icon {
-  width: 38px; height: 38px;
-  border-radius: 10px;
-  background: #eef2ff;
-  color: #6366f1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.ops-card-icon.dark { background: #f1f5f9; color: #0f172a; }
-.ops-card-info {
-  flex: 1;
-}
-.ops-card-info strong { display: block; font-size: 13.5px; color: #0f172a; }
-.ops-card-info span { display: block; font-size: 12px; color: #94a3b8; margin-top: 1px; }
-
-/* ===== 备份 ===== */
-.section-desc {
-  margin: 0 0 14px;
-  font-size: 13px;
-  color: #64748b;
-  line-height: 1.6;
-}
-.backup-row {
-  display: flex;
-  gap: 10px;
-}
-.import-result {
-  margin-top: 12px;
-  padding: 12px 14px;
-  background: #f8f9fc;
-  border: 1px solid #eef0f4;
-  border-radius: 10px;
-  font-size: 12px;
-}
-.import-summary { display: flex; flex-wrap: wrap; gap: 8px; color: #475569; }
-.import-summary span {
-  padding: 3px 10px;
-  background: #eef2ff;
-  border-radius: 6px;
-  color: #6366f1;
-  font-weight: 600;
-}
-.import-errors { margin-top: 8px; border-top: 1px solid #eef0f4; padding-top: 8px; }
-.error-line { color: #ef4444; font-size: 12px; padding: 2px 0; }
-
-/* ===== 用户管理 ===== */
-.create-user-form {
-  margin-bottom: 16px;
-  padding: 16px;
-  background: #f8f9fc;
-  border: 1px solid #eef0f4;
-  border-radius: 12px;
-}
-.form-row-3 {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 10px;
-  margin-bottom: 10px;
-}
-.form-input, .form-select {
-  height: 40px;
-  border: 1px solid #e2e8f0;
-  border-radius: 10px;
-  padding: 0 12px;
-  font-size: 13px;
-  outline: none;
-  background: #fff;
-  color: #0f172a;
-  transition: all 0.2s;
-}
-.form-input:focus, .form-select:focus {
-  border-color: #6366f1;
-  box-shadow: 0 0 0 3px rgba(99,102,241,.08);
-}
-.form-input::placeholder { color: #94a3b8; }
-
-.user-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 10px;
-}
-.user-card {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 14px 16px;
-  background: #f8f9fc;
-  border-radius: 10px;
-  border: 1px solid #eef0f4;
-  transition: all 0.2s;
-}
-.user-card:hover { border-color: #cbd5e1; }
-.user-avatar {
-  width: 38px; height: 38px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 15px;
-  font-weight: 800;
-  flex-shrink: 0;
-}
-.user-avatar.admin { background: #eef2ff; color: #6366f1; }
-.user-avatar.operator { background: #ecfdf5; color: #10b981; }
-.user-avatar.viewer { background: #f1f5f9; color: #64748b; }
-.user-info {
-  flex: 1;
-  min-width: 0;
-}
-.user-info strong {
-  display: block;
-  font-size: 13.5px;
-  color: #0f172a;
-}
-.role-badge {
-  display: inline-block;
-  font-size: 11px;
-  font-weight: 600;
-  padding: 1px 8px;
-  border-radius: 5px;
-  margin-top: 3px;
-}
-.role-badge.admin { background: #eef2ff; color: #6366f1; }
-.role-badge.operator { background: #ecfdf5; color: #10b981; }
-.role-badge.viewer { background: #f1f5f9; color: #94a3b8; }
-
-.empty-mini {
-  grid-column: 1 / -1;
-  text-align: center;
-  padding: 32px;
-  color: #94a3b8;
-  font-size: 13px;
-}
-
-/* ===== 响应式 ===== */
-@media (max-width: 768px) {
-  .settings-grid { grid-template-columns: 1fr; }
-  .full-width { grid-column: auto; }
-  .license-metrics-row { grid-template-columns: repeat(2, 1fr); }
-  .activate-form { flex-direction: column; }
-  .backup-row { flex-direction: column; }
-  .form-row-3 { grid-template-columns: 1fr; }
-  .user-grid { grid-template-columns: 1fr; }
-}
+.settings-page { max-width: 1240px; display: flex; flex-direction: column; gap: 16px; color: #0f172a; }
+.settings-hero { display: flex; align-items: flex-start; justify-content: space-between; gap: 20px; padding: 24px 26px; border: 1px solid #e2e8f0; border-radius: 14px; background: linear-gradient(112deg, #ffffff 0%, #f8fbff 100%); box-shadow: 0 10px 28px rgba(15, 23, 42, .035); }
+.hero-copy { min-width: 0; }.eyebrow,.card-kicker,.status-kicker { display: block; margin: 0; color: #64748b; font: 700 10px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; }
+.hero-title-row { display: flex; align-items: center; gap: 13px; margin-top: 9px; }.hero-icon { display: grid; flex: 0 0 auto; width: 42px; height: 42px; place-items: center; border: 1px solid #bfdbfe; border-radius: 12px; background: #eff6ff; color: #2563eb; }.hero-title-row h1 { margin: 0; font-size: 22px; line-height: 1.15; letter-spacing: -.03em; }.hero-title-row p { margin: 4px 0 0; color: #64748b; font-size: 12.5px; }.hero-tags { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 17px; }.hero-tag,.card-state,.neutral-chip,.operation-label { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 4px 8px; background: #f1f5f9; color: #475569; font-size: 11px; font-weight: 700; }.hero-tag.good { background: #ecfdf5; color: #047857; }.refresh-button,.primary-button,.secondary-button,.text-button,.remove-user { display: inline-flex; align-items: center; justify-content: center; gap: 7px; border-radius: 8px; font: inherit; font-weight: 700; cursor: pointer; transition: transform 160ms cubic-bezier(.23, 1, .32, 1), border-color 160ms ease, background 160ms ease, color 160ms ease; }.refresh-button:active,.primary-button:active,.secondary-button:active,.text-button:active { transform: scale(.97); }.refresh-button { min-height: 34px; padding: 0 11px; border: 1px solid #dbe3ee; background: #fff; color: #475569; font-size: 12px; }.refresh-button:hover { border-color: #93c5fd; color: #2563eb; }.refresh-button:disabled,.primary-button:disabled,.secondary-button:disabled { cursor: not-allowed; opacity: .55; }
+.status-strip { display: grid; grid-template-columns: repeat(3, 1fr); overflow: hidden; border: 1px solid #e2e8f0; border-radius: 12px; background: #fff; }.status-item { min-width: 0; padding: 14px 18px; border-right: 1px solid #eef2f7; }.status-item:last-child { border-right: 0; }.status-item strong { display: flex; align-items: center; gap: 7px; margin-top: 6px; font-size: 15px; }.status-item small { display: block; overflow: hidden; margin-top: 4px; color: #64748b; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }.status-dot { width: 7px; height: 7px; border-radius: 50%; background: #94a3b8; }.status-dot.ok { background: #16a34a; box-shadow: 0 0 0 4px #f0fdf4; }.status-dot.warning { background: #d97706; box-shadow: 0 0 0 4px #fffbeb; }
+.settings-layout { display: grid; grid-template-columns: minmax(0, 1.48fr) minmax(320px, .92fr); align-items: start; gap: 16px; }.settings-main,.settings-side { display: flex; flex-direction: column; gap: 16px; }.workspace-card { overflow: hidden; border: 1px solid #e2e8f0; border-radius: 13px; background: #fff; box-shadow: 0 7px 22px rgba(15, 23, 42, .025); }.card-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; padding: 18px 20px 16px; border-bottom: 1px solid #eef2f7; }.card-heading.tight { padding-bottom: 14px; }.card-heading h2 { margin: 5px 0 0; font-size: 15px; letter-spacing: -.01em; }.card-heading span:not(.card-kicker):not(.tile-icon):not(.text-button) { display: block; margin-top: 4px; color: #64748b; font-size: 12px; line-height: 1.55; }.card-state { flex: 0 0 auto; margin-top: 3px; background: #eff6ff; color: #2563eb; }.policy-list { padding: 4px 20px; }.policy-row { display: flex; align-items: center; gap: 12px; padding: 16px 0; border-bottom: 1px solid #f1f5f9; }.policy-row:last-child { border-bottom: 0; }.policy-mark,.tile-icon { display: grid; flex: 0 0 auto; width: 34px; height: 34px; place-items: center; border-radius: 10px; }.policy-mark svg,.tile-icon svg { width: 17px; height: 17px; }.shield-mark { background: #eff6ff; color: #2563eb; }.protocol-mark { background: #f8fafc; color: #64748b; }.policy-copy { flex: 1; min-width: 0; }.policy-copy strong { display: block; font-size: 13px; }.policy-copy p { margin: 3px 0 0; color: #64748b; font-size: 12px; line-height: 1.5; }.neutral-chip { flex: 0 0 auto; color: #64748b; }.switch { position: relative; flex: 0 0 auto; width: 42px; height: 24px; }.switch input { width: 0; height: 0; opacity: 0; }.switch-track { position: absolute; inset: 0; border-radius: 999px; background: #cbd5e1; cursor: pointer; transition: background 160ms ease; }.switch-track::before { position: absolute; left: 3px; top: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(15,23,42,.16); content: ''; transition: transform 180ms cubic-bezier(.23, 1, .32, 1); }.switch input:checked + .switch-track { background: #2563eb; }.switch input:checked + .switch-track::before { transform: translateX(18px); }.card-action-row { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 13px 20px; border-top: 1px solid #eef2f7; background: #fafcff; }.card-action-row p { margin: 0; color: #64748b; font-size: 11px; line-height: 1.5; }.primary-button { min-height: 34px; padding: 0 13px; border: 1px solid #2563eb; background: #2563eb; color: #fff; font-size: 12px; }.primary-button:hover { border-color: #1d4ed8; background: #1d4ed8; }.primary-button.compact { flex: 0 0 auto; }.primary-button.full { width: 100%; }.operation-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px 20px 20px; }.operation-tile { min-height: 164px; padding: 15px; border: 1px solid #dbeafe; border-radius: 11px; background: #f8fbff; }.operation-tile.muted-tile { border-color: #e2e8f0; background: #fafafa; }.tile-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; }.tile-icon.blue { background: #dbeafe; color: #2563eb; }.tile-icon.slate { background: #f1f5f9; color: #475569; }.tile-icon.amber { background: #fffbeb; color: #b45309; }.operation-label { padding: 3px 6px; background: #eff6ff; color: #2563eb; font-size: 10px; }.operation-label.neutral { background: #f1f5f9; color: #64748b; }.operation-tile h3 { margin: 13px 0 0; font-size: 13px; }.operation-tile p { min-height: 37px; margin: 5px 0 14px; color: #64748b; font-size: 11.5px; line-height: 1.55; }.secondary-button { min-height: 32px; padding: 0 11px; border: 1px solid #bfdbfe; background: #fff; color: #2563eb; font-size: 11.5px; }.secondary-button:hover { border-color: #2563eb; background: #eff6ff; }.neutral-action { border-color: #cbd5e1; color: #475569; }.neutral-action:hover { background: #f8fafc; color: #334155; }.backup-content { display: flex; align-items: center; gap: 15px; padding: 18px 20px; }.backup-visual { display: grid; flex: 0 0 auto; width: 58px; height: 58px; place-items: center; border-radius: 14px; background: #f5f3ff; color: #7c3aed; }.backup-visual svg { width: 34px; height: 34px; }.backup-copy { min-width: 0; }.backup-copy strong { font-size: 13px; }.backup-copy p { margin: 5px 0 12px; color: #64748b; font-size: 12px; line-height: 1.6; }.backup-actions { display: flex; flex-wrap: wrap; gap: 8px; }.upload-button { box-sizing: border-box; }.upload-button.disabled { cursor: not-allowed; opacity: .55; }.import-result { margin: 0 20px 18px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 10px; background: #f8fbff; }.result-heading { display: flex; align-items: center; gap: 6px; color: #2563eb; font-size: 11px; font-weight: 800; }.import-summary { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 9px; }.import-summary span { border-radius: 5px; padding: 3px 7px; background: #fff; color: #475569; font-size: 11px; font-weight: 700; }.import-errors { margin-top: 8px; padding-top: 8px; border-top: 1px solid #dbeafe; }.error-line { color: #dc2626; font-size: 11px; line-height: 1.5; }
+.password-fields { display: flex; flex-direction: column; gap: 12px; padding: 16px 20px 20px; }.input-field > span { display: block; margin-bottom: 6px; color: #475569; font-size: 11px; font-weight: 700; }.password-input { position: relative; }.password-input input,.form-input,.form-select { box-sizing: border-box; width: 100%; height: 38px; border: 1px solid #dbe3ee; border-radius: 8px; padding: 0 36px 0 10px; outline: none; background: #fff; color: #0f172a; font: inherit; font-size: 12px; transition: border-color 160ms ease, box-shadow 160ms ease; }.password-input input:focus,.form-input:focus,.form-select:focus { border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(37,99,235,.09); }.password-input input::placeholder,.form-input::placeholder { color: #94a3b8; }.toggle-vis { position: absolute; right: 5px; top: 50%; display: grid; width: 28px; height: 28px; place-items: center; transform: translateY(-50%); border: 0; border-radius: 6px; background: transparent; color: #94a3b8; cursor: pointer; }.toggle-vis:hover { color: #2563eb; background: #eff6ff; }.text-button { flex: 0 0 auto; min-height: 30px; border: 0; background: transparent; color: #2563eb; font-size: 11px; }.text-button:hover { background: #eff6ff; }.create-user-form { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 0 20px 13px; padding: 12px; border: 1px solid #dbeafe; border-radius: 10px; background: #f8fbff; }.create-user-form .form-select { padding-right: 8px; }.create-user-form .primary-button { grid-column: 1 / -1; }.user-list { display: flex; flex-direction: column; padding: 4px 20px 17px; }.user-row { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #f1f5f9; }.user-row:last-child { border-bottom: 0; }.user-avatar { display: grid; flex: 0 0 auto; width: 31px; height: 31px; place-items: center; border-radius: 9px; font-size: 12px; font-weight: 800; }.user-avatar.admin { background: #eff6ff; color: #2563eb; }.user-avatar.operator { background: #ecfdf5; color: #047857; }.user-avatar.viewer { background: #f1f5f9; color: #64748b; }.user-copy { flex: 1; min-width: 0; }.user-copy strong { display: block; overflow: hidden; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }.role-badge { display: inline-block; margin-top: 2px; border-radius: 4px; padding: 1px 5px; font-size: 10px; font-weight: 700; }.role-badge.admin { background: #eff6ff; color: #2563eb; }.role-badge.operator { background: #ecfdf5; color: #047857; }.role-badge.viewer { background: #f1f5f9; color: #64748b; }.remove-user { min-height: 26px; padding: 0 6px; border: 0; background: transparent; color: #dc2626; font-size: 10.5px; }.remove-user:hover { background: #fef2f2; }.remove-user:disabled { cursor: not-allowed; opacity: .35; }.empty-users { padding: 14px 20px 19px; color: #94a3b8; font-size: 12px; }.guidance-card { padding: 17px 19px; border: 1px solid #dbeafe; border-radius: 13px; background: linear-gradient(135deg, #eff6ff, #fff); }.guidance-card strong { display: block; margin-top: 7px; color: #1e3a8a; font-size: 13px; }.guidance-card ol { margin: 10px 0 0 17px; padding: 0; color: #475569; font-size: 11.5px; line-height: 1.85; }
+@media (max-width: 960px) { .settings-layout { grid-template-columns: 1fr; }.settings-side { display: grid; grid-template-columns: 1fr 1fr; align-items: start; }.guidance-card { grid-column: 1 / -1; }.password-card,.users-card { height: 100%; } }
+@media (max-width: 680px) { .settings-hero { flex-direction: column; padding: 19px; }.refresh-button { width: 100%; }.status-strip { grid-template-columns: 1fr; }.status-item { border-right: 0; border-bottom: 1px solid #eef2f7; }.status-item:last-child { border-bottom: 0; }.settings-side { display: flex; }.operation-grid { grid-template-columns: 1fr; }.backup-content { align-items: flex-start; }.card-action-row { align-items: flex-start; flex-direction: column; }.card-action-row .primary-button { width: 100%; }.create-user-form { grid-template-columns: 1fr; }.hero-title-row h1 { font-size: 20px; } }
+@media (prefers-reduced-motion: reduce) { .refresh-button,.primary-button,.secondary-button,.text-button,.switch-track,.switch-track::before { transition: none; } }
 </style>

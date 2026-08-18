@@ -107,10 +107,8 @@ const router = useRouter()
 const isLoginPage = computed(() => route.path === '/login')
 const isStandalone = computed(() => route.path === '/login' || route.path === '/soc-dashboard' || route.path === '/setup' || route.path === '/welcome')
 const edition = ref('free')
-const isPro = computed(() => true) // 保留注入兼容性，V2 不再设有功能授权门槛。
 const editionLabel = computed(() => 'V2 Free')
 provide('edition', edition)
-provide('isPro', isPro)
 const sidebarOpen = ref(false)
 
 watch(() => route.path, () => {
