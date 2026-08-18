@@ -13,25 +13,25 @@
             <img src="/logo.png" alt="智域 WAF" />
           </div>
           <h1 class="brand-name">智域 WAF</h1>
-          <p class="brand-desc">AI 驱动的新一代<br/>智能 Web 应用防火墙</p>
+          <p class="brand-desc">本地优先的<br/>Web 应用防护控制台</p>
           <div class="features">
             <div class="feat">
               <div class="feat-icon fi-1">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
               </div>
-              <div><b>智能防护</b><span>规则 + AI 双引擎检测</span></div>
+              <div><b>本地风险决策</b><span>规则、行为与风险引擎统一判定</span></div>
             </div>
             <div class="feat">
               <div class="feat-icon fi-2">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
               </div>
-              <div><b>全球覆盖</b><span>地理封锁 + 威胁情报</span></div>
+              <div><b>可解释防护</b><span>事件、证据与最终动作可追溯</span></div>
             </div>
             <div class="feat">
               <div class="feat-icon fi-3">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
               </div>
-              <div><b>极速响应</b><span>毫秒级检测 &lt; 5ms</span></div>
+              <div><b>安全降级</b><span>内核不可用时保留应用层阻断</span></div>
             </div>
           </div>
         </div>
@@ -41,8 +41,8 @@
       <div class="form-panel">
         <div class="form-inner">
           <div class="form-header">
-            <h2>欢迎回来</h2>
-            <p>登录控制台管理您的安全策略</p>
+            <h2>进入安全控制台</h2>
+            <p>管理站点、风险决策与本地防护策略</p>
           </div>
 
           <el-form :model="form" :rules="rules" ref="formRef" @submit.prevent="handleLogin" class="login-form">
@@ -69,13 +69,13 @@
 
           <div class="form-footer">
             <span class="dot"></span>
-            安全会话 · 操作留痕 · 数据加密
+            本地会话 · 操作留痕 · 安全访问
           </div>
         </div>
       </div>
     </div>
 
-    <div class="page-footer">© 2026 小睿科技 版权所有</div>
+    <div class="page-footer">ZHIYU-WAF V2 · Local-first protection</div>
   </div>
 </template>
 
@@ -195,7 +195,7 @@ async function handleLogin() {
 /* 左侧品牌 */
 .brand-panel {
   flex: 1;
-  background: linear-gradient(145deg, #6366f1 0%, #4f46e5 40%, #7c3aed 100%);
+  background: linear-gradient(145deg, #0f3f72 0%, #1d4ed8 48%, #2563eb 100%);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -365,14 +365,14 @@ async function handleLogin() {
   height: 44px;
   border: none;
   border-radius: 10px;
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  background: linear-gradient(135deg, #2563eb, #1d4ed8);
   font-size: 15px;
   font-weight: 700;
   letter-spacing: 2px;
   transition: all 0.2s;
 }
 .login-btn:hover:not(.is-disabled) {
-  background: linear-gradient(135deg, #4f46e5, #4338ca);
+  background: linear-gradient(135deg, #1d4ed8, #1e40af);
   transform: translateY(-1px);
   box-shadow: 0 6px 16px rgba(99, 102, 241, 0.3);
 }

@@ -138,7 +138,7 @@
       <div class="step-body" v-if="step === 3">
         <div class="step-kicker">启动前确认</div>
         <h2>确认配置并进入控制台</h2>
-        <p class="step-desc">启动后会自动登录管理员账号，并展示欢迎页。</p>
+        <p class="step-desc">启动后会自动登录管理员账号，并进入安全态势页。</p>
         <div class="summary-grid">
           <div class="summary-item">
             <span class="summary-label">管理员账号</span>
@@ -263,7 +263,7 @@ async function applySetup() {
     if (res.token) setAuthToken(res.token)
     markSetupComplete()
     ElMessage.success('配置完成，正在跳转...')
-    setTimeout(() => router.replace('/welcome'), 600)
+    setTimeout(() => router.replace('/dashboard'), 600)
   } catch (e) {
     ElMessage.error(e.response?.data?.error || '配置应用失败')
   } finally {

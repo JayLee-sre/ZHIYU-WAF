@@ -4,7 +4,6 @@ import api, { getAuthToken } from '../api'
 const routes = [
   { path: '/login', component: () => import('../views/Login.vue') },
   { path: '/setup', component: () => import('../views/SetupWizard.vue') },
-  { path: '/welcome', component: () => import('../views/WelcomeLetter.vue') },
   { path: '/', redirect: '/dashboard' },
   { path: '/dashboard', component: () => import('../views/Dashboard.vue'), meta: { requiresAuth: true } },
   { path: '/logs', component: () => import('../views/AttackLogs.vue'), meta: { requiresAuth: true } },
