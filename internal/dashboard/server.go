@@ -6,6 +6,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -21,6 +22,16 @@ type Server struct {
 	store      store.Storage
 	hub        *Hub
 	server     *http.Server
+
+	// Build and GitHub Release update-check state. The checker is intentionally
+	// unauthenticated because the upstream repository is public; this avoids
+	// storing GitHub credentials in the control plane.
+	buildVersion       string
+	githubReleaseURL   string
+	githubHTTPClient   *http.Client
+	updateCacheMu      sync.Mutex
+	updateCache        updateCheckResponse
+	updateCacheExpires time.Time
 
 	// Callbacks for hot-reload (set by main.go)
 	OnAIConfigChanged    func()
@@ -42,9 +53,12 @@ type Server struct {
 
 func NewServer(cfg *config.Config, s store.Storage) *Server {
 	srv := &Server{
-		cfg:   cfg,
-		store: s,
-		hub:   NewHub(cfg.Dashboard.CORSOrigins),
+		cfg:              cfg,
+		store:            s,
+		hub:              NewHub(cfg.Dashboard.CORSOrigins),
+		buildVersion:     BuildVersion,
+		githubReleaseURL: GitHubLatestReleaseURL,
+		githubHTTPClient: &http.Client{Timeout: 5 * time.Second},
 	}
 
 	srv.server = &http.Server{
@@ -104,6 +118,14 @@ func (s *Server) Hub() *Hub {
 
 func (s *Server) SetConfigPath(path string) {
 	s.configPath = path
+}
+
+// SetBuildVersion assigns the current build's semantic version. It is used
+// only for comparing against public GitHub Release tags.
+func (s *Server) SetBuildVersion(version string) {
+	if version != "" {
+		s.buildVersion = version
+	}
 }
 
 func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {

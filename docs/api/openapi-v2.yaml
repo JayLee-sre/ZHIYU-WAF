@@ -987,6 +987,35 @@ paths:
       summary: 受控重载本地配置
       responses:
         '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/system/update/check:
+    post:
+      tags: [Settings]
+      summary: 查询 GitHub Releases 中的最新正式版本
+      description: |
+        仅查询公开的 GitHub Release，不保存 GitHub 凭据、不自动下载，
+        并对无正式发布、网络异常和版本标签不兼容提供可解释状态。
+      responses:
+        '200':
+          description: 更新检查状态
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [status, current_version, release_url, update_available, message, checked_at, cached]
+                properties:
+                  status:
+                    type: string
+                    enum: [update_available, up_to_date, no_release, unavailable]
+                  current_version: { type: string, example: v2.0.0-dev }
+                  latest_version: { type: string, example: v2.1.0 }
+                  release_name: { type: string, example: ZHIYU-WAF V2.1.0 }
+                  release_notes: { type: string }
+                  published_at: { type: string, format: date-time }
+                  release_url: { type: string, format: uri }
+                  update_available: { type: boolean }
+                  message: { type: string }
+                  checked_at: { type: string, format: date-time }
+                  cached: { type: boolean, description: 是否返回十分钟本地缓存结果 }
   /api/v1/backup/export:
     get:
       tags: [Backup]

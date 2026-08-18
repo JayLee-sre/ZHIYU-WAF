@@ -131,6 +131,7 @@ func (s *Server) setupRouter() *chi.Mux {
 		r.Get("/api/v1/settings", s.handleGetSettings)
 		r.Put("/api/v1/settings", s.handleUpdateSettings)
 		r.Post("/api/v1/config/reload", s.handleReloadConfig)
+		r.Post("/api/v1/system/update/check", s.handleCheckGitHubUpdate)
 
 		// Backup / Restore
 		r.Get("/api/v1/backup/export", s.handleExportBackup)
