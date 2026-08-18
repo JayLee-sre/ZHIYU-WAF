@@ -1,10 +1,16 @@
 .PHONY: build backend run clean test test-integration bench frontend frontend-dev all deps
 
+# Pass VERSION=vX.Y.Z for official releases. Development builds intentionally
+# retain the prerelease suffix so GitHub update checks can identify stable tags.
+VERSION ?= v2.0.0-dev
+GO ?= go
+BUILD_LDFLAGS := -X zhiyuwaf/internal/dashboard.BuildVersion=$(VERSION)
+
 backend:
 	rm -rf internal/dashboard/dist
 	mkdir -p internal/dashboard
 	cp -R web/dist internal/dashboard/dist
-	go build -o bin/zhiyu-waf ./cmd/zhiyu-waf
+	$(GO) build -ldflags "$(BUILD_LDFLAGS)" -o bin/zhiyu-waf ./cmd/zhiyu-waf
 
 frontend:
 	cd web && npm run build

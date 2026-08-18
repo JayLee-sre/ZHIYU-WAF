@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/engine"
 	"zhiyuwaf/internal/model"
 )
@@ -84,6 +85,31 @@ func httptestRequest(method, target string, body *bytes.Reader) *http.Request {
 	req.RemoteAddr = "127.0.0.1:12345"
 	req.Header.Set("User-Agent", "test")
 	return req
+}
+
+func TestObservationPersistenceDecisionDowngradesEnforcement(t *testing.T) {
+	for _, action := range []core.Action{core.ActionBlock, core.ActionRateLimit} {
+		original := &core.Decision{Action: action}
+		observed := observationPersistenceDecision(original, true)
+		if observed == original {
+			t.Fatalf("expected copied decision for %s", action)
+		}
+		if observed.Action != core.ActionLog {
+			t.Fatalf("expected audit-only action for %s, got %s", action, observed.Action)
+		}
+		if original.Action != action {
+			t.Fatalf("original action was mutated: got %s want %s", original.Action, action)
+		}
+	}
+
+	allowed := &core.Decision{Action: core.ActionAllow}
+	if got := observationPersistenceDecision(allowed, true); got != allowed {
+		t.Fatal("allow decision should not be copied or changed")
+	}
+	blocking := &core.Decision{Action: core.ActionBlock}
+	if got := observationPersistenceDecision(blocking, false); got != blocking {
+		t.Fatal("enforcement decision should stay intact outside observation mode")
+	}
 }
 
 func TestTrimSpace(t *testing.T) {

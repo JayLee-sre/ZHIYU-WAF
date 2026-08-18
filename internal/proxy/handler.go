@@ -241,13 +241,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			// fault is visible in logs but never makes the protected site fail.
 			log.Printf("V2 pipeline error: %v", err)
 		} else if decision != nil {
-			if onV2Decision != nil {
-				go onV2Decision(decision, normalized)
-			}
 			monitorOnly := route != nil && route.Mode == "monitor"
+			observeOnly := h.pipeline.IsObservationMode() || monitorOnly
+
+			// In observation mode, persist the evidence but never hand a Block or
+			// RateLimit action to the persistence callback. The callback owns
+			// nftables escalation, so forwarding the original action would turn a
+			// monitor-only request into a kernel-level IP block.
+			decisionForPersistence := observationPersistenceDecision(decision, observeOnly)
+			if onV2Decision != nil {
+				go onV2Decision(decisionForPersistence, normalized)
+			}
+
 			switch decision.Action {
 			case core.ActionBlock:
-				if h.pipeline.IsObservationMode() || monitorOnly {
+				if observeOnly {
 					log.Printf("OBSERVE V2 %s risk=%d (would block; mode=%s)", decision.RequestID, decision.Risk.Score, routeMode(route))
 
 				} else {
@@ -258,7 +266,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 					return
 				}
 			case core.ActionRateLimit:
-				if h.pipeline.IsObservationMode() || monitorOnly {
+				if observeOnly {
 					log.Printf("OBSERVE V2 %s risk=%d (would rate limit; mode=%s)", decision.RequestID, decision.Risk.Score, routeMode(route))
 
 				} else {
@@ -575,6 +583,18 @@ func (h *Handler) resolveClientIP(r *http.Request) string {
 		}
 	}
 	return extractRealClientIPFromReq(r)
+}
+
+// observationPersistenceDecision preserves the detection evidence while changing
+// enforcement-capable actions to an audit-only action. This prevents monitor and
+// global observation modes from reaching the persistence callback's nftables path.
+func observationPersistenceDecision(decision *core.Decision, observeOnly bool) *core.Decision {
+	if decision == nil || !observeOnly || (decision.Action != core.ActionBlock && decision.Action != core.ActionRateLimit) {
+		return decision
+	}
+	observed := *decision
+	observed.Action = core.ActionLog
+	return &observed
 }
 
 func extractRealClientIPFromReq(r *http.Request) string {
