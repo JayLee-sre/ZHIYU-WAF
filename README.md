@@ -32,18 +32,11 @@ ZHIYU-WAF V2 以 Go 反向代理承接业务流量，并在本地完成规范化
 
 外部 AI 是**可选的异步辅助能力**，不是核心防护链的依赖。未配置模型、模型超时或外部网络不可达时，基础规则、风险判定和 HTTP 阻断均继续运行。
 
-```mermaid
-flowchart LR
-  A[Client] --> B[Ingress / Nginx / Load Balancer]
-  B --> C[ZHIYU-WAF V2 Proxy]
-  C --> D[规范化与可信客户端 IP]
-  D --> E[ACL · 频率信号 · 规则检测 · 行为画像]
-  E --> F[统一风险引擎]
-  F -->|ALLOW / LOG| G[业务后端]
-  F -->|RATE LIMIT / BLOCK| H[应用层响应]
-  F -->|高风险或人工封禁| I[(SQLite 封禁记录)]
-  I --> J[nftables IPv4 / IPv6 集合]
-```
+<div align="center">
+  <img src="docs/images/zhiyu-waf-v2-architecture.png" width="100%" alt="ZHIYU-WAF V2 分层防护架构：流量入口、本地风险决策链、唯一最终动作和本地状态与内核执行" />
+</div>
+
+<sub>架构图采用固定分层布局：检测器先产出证据，统一风险引擎只输出一次最终动作；安全事件、封禁 TTL 与 nftables 内核执行相互解耦。可维护源文件见 [`docs/architecture/zhiyu-waf-v2-architecture.dot`](docs/architecture/zhiyu-waf-v2-architecture.dot)。</sub>
 
 ## 核心能力
 

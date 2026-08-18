@@ -1,0 +1,117 @@
+digraph ZHIYU_WAF_V2 {
+  graph [
+    rankdir=TB,
+    bgcolor="#FFFFFF",
+    pad="0.20",
+    nodesep="0.34",
+    ranksep="0.62",
+    splines=ortho,
+    fontname="Noto Sans CJK SC",
+    fontsize=15,
+    fontcolor="#0F172A"
+  ];
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Noto Sans CJK SC",
+    fontsize=12,
+    margin="0.16,0.10",
+    color="#94A3B8",
+    fillcolor="#FFFFFF",
+    fontcolor="#0F172A",
+    penwidth=1.15
+  ];
+  edge [
+    fontname="Noto Sans CJK SC",
+    fontsize=10,
+    color="#64748B",
+    fontcolor="#475569",
+    penwidth=1.15,
+    arrowsize=0.7
+  ];
+
+  subgraph cluster_entry {
+    label="01 · 流量入口";
+    fontname="Noto Sans CJK SC";
+    fontsize=13;
+    fontcolor="#1E3A8A";
+    color="#BFDBFE";
+    fillcolor="#F8FBFF";
+    style="rounded,filled";
+    penwidth=1.25;
+    margin=14;
+    client [label="客户端请求", shape=oval];
+    edge_proxy [label="Ingress / Nginx\n负载均衡"];
+    waf [label="ZHIYU-WAF V2 Proxy", fillcolor="#EFF6FF", color="#60A5FA", fontcolor="#1D4ED8", penwidth=1.4];
+    { rank=same; client; edge_proxy; waf; }
+    client -> edge_proxy -> waf;
+  }
+
+  subgraph cluster_decision {
+    label="02 · 本地风险决策链";
+    fontname="Noto Sans CJK SC";
+    fontsize=13;
+    fontcolor="#5B21B6";
+    color="#DDD6FE";
+    fillcolor="#FAF5FF";
+    style="rounded,filled";
+    penwidth=1.25;
+    margin=14;
+    normalize [label="规范化请求\n可信客户端 IP"];
+    evidence [label="检测证据采集\nACL · 频率 · 规则 · 行为"];
+    risk [label="统一风险引擎\n评分 · 置信度 · 去重", shape=hexagon, fillcolor="#F5F3FF", color="#7C3AED", fontcolor="#5B21B6", penwidth=1.6];
+    { rank=same; normalize; evidence; risk; }
+    normalize -> evidence -> risk;
+  }
+
+  subgraph cluster_outcomes {
+    label="03 · 唯一最终动作";
+    fontname="Noto Sans CJK SC";
+    fontsize=13;
+    fontcolor="#334155";
+    color="#CBD5E1";
+    fillcolor="#F8FAFC";
+    style="rounded,filled";
+    penwidth=1.25;
+    margin=14;
+    allow [label="ALLOW / LOG\n继续回源", fillcolor="#EFF6FF", color="#60A5FA", fontcolor="#1D4ED8", penwidth=1.4];
+    limit [label="RATE LIMIT\n应用层限流响应", fillcolor="#FFFBEB", color="#F59E0B", fontcolor="#92400E", penwidth=1.4];
+    block [label="BLOCK\n应用层阻断响应", fillcolor="#FEF2F2", color="#F87171", fontcolor="#B91C1C", penwidth=1.4];
+    { rank=same; allow; limit; block; }
+  }
+
+  subgraph cluster_state {
+    label="04 · 本地状态与内核执行";
+    fontname="Noto Sans CJK SC";
+    fontsize=13;
+    fontcolor="#334155";
+    color="#CBD5E1";
+    fillcolor="#F8FAFC";
+    style="rounded,filled";
+    penwidth=1.25;
+    margin=14;
+    events [label="安全事件\nSQLite", shape=cylinder, fillcolor="#FFFFFF", color="#64748B"];
+    blocklist [label="封禁 IP\nSQLite + TTL", shape=cylinder, fillcolor="#FFFFFF", color="#64748B"];
+    nft [label="nftables\nIPv4 / IPv6 Set", fillcolor="#FDF2F8", color="#EC4899", fontcolor="#9D174D", penwidth=1.5];
+    { rank=same; events; blocklist; nft; }
+    blocklist -> nft;
+  }
+
+  backend [label="业务后端", shape=cylinder, fillcolor="#F5F3FF", color="#A78BFA", fontcolor="#5B21B6", penwidth=1.5];
+  ai [label="可选 AI 辅助\n异步 · Fail-open", style="rounded,dashed,filled", fillcolor="#F0FDFA", color="#14B8A6", fontcolor="#0F766E", penwidth=1.25];
+
+  waf -> normalize [label="HTTP 请求"];
+  risk -> allow [label="低风险"];
+  risk -> limit [label="异常频率"];
+  risk -> block [label="高风险"];
+  allow -> backend [label="回源"];
+  risk -> events [label="审计证据", style=dashed, color="#94A3B8", fontcolor="#64748B"];
+  limit -> blocklist [label="高风险封禁", style=dashed, color="#94A3B8", fontcolor="#64748B"];
+  block -> blocklist [label="高风险封禁", style=dashed, color="#94A3B8", fontcolor="#64748B"];
+  ai -> evidence [label="补充证据", style=dashed, color="#14B8A6", fontcolor="#0F766E", minlen=1];
+
+  { rank=same; normalize; evidence; risk; }
+  { rank=same; events; blocklist; nft; backend; }
+  events -> blocklist [style=invis, weight=5];
+  nft -> backend [style=invis, weight=5];
+}
