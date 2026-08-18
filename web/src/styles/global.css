@@ -4,10 +4,12 @@
 
 :root {
   /* ── Brand ── */
-  --primary:       #6366f1;
-  --primary-hover: #4f46e5;
-  --primary-light: #eef2ff;
-  --primary-text:  #4338ca;
+  --primary:       #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-light: #eff6ff;
+  --primary-text:  #1d4ed8;
+  --accent:        #0f766e;
+  --accent-light:  #ecfdf5;
 
   /* ── Semantic ── */
   --danger:  #dc2626;
@@ -25,17 +27,17 @@
   --text-primary:   #0f172a;
   --text-secondary: #475569;
   --text-muted:     #94a3b8;
-  --border:         #dfe7f1;
-  --border-light:   #edf2f7;
-  --bg-page:        #f5f7fb;
+  --border:         #d9e3f0;
+  --border-light:   #eaf0f7;
+  --bg-page:        #f4f7fb;
   --bg-card:        #ffffff;
   --bg-hover:       #f8fafc;
   --bg-subtle:      #fafbfc;
   --surface-1:      #ffffff;
   --surface-2:      #f8fafc;
   --surface-3:      #eef4fb;
-  --shadow-card:    0 1px 2px rgba(15,23,42,.04), 0 12px 28px rgba(15,23,42,.05);
-  --shadow-raised:  0 16px 40px rgba(15,23,42,.09);
+  --shadow-card:    0 1px 2px rgba(15,23,42,.03), 0 12px 28px rgba(15,23,42,.055);
+  --shadow-raised:  0 18px 42px rgba(15,23,42,.10);
 
   /* ── Spacing ── */
   --page-gap:    16px;
@@ -44,11 +46,11 @@
   --head-pad:    11px 16px;
 
   /* ── Radius ── */
-  --radius-card:   10px;
-  --radius-btn:    8px;
-  --radius-pill:   6px;
-  --radius-input:  8px;
-  --radius-badge:  5px;
+  --radius-card:   14px;
+  --radius-btn:    9px;
+  --radius-pill:   999px;
+  --radius-input:  9px;
+  --radius-badge:  6px;
 
   /* ── Font ── */
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -80,6 +82,14 @@ body {
   line-height: 1.5;
   font-size: 14px;
 }
+
+::selection { background: #bfdbfe; color: #172554; }
+:focus-visible { outline: 3px solid rgba(37, 99, 235, .32); outline-offset: 2px; }
+button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border: 3px solid transparent; border-radius: 99px; background-clip: content-box; }
+::-webkit-scrollbar-thumb:hover { background-color: #94a3b8; }
 
 /* ========================================================
    Page Layout

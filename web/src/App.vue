@@ -232,12 +232,13 @@ function logout() {
   height: 100vh;
   display: flex;
   overflow: hidden;
+  background: #f4f7fb;
 }
 
 /* ===== Sidebar ===== */
 .sidebar {
-  width: 272px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbfdff 100%);
+  width: 280px;
+  background: linear-gradient(180deg, #ffffff 0%, #f8fbff 100%);
   border-right: 1px solid #dfe7f1;
   display: flex;
   flex-direction: column;
@@ -246,8 +247,8 @@ function logout() {
 }
 
 .sidebar-header {
-  padding: 18px 18px 14px;
-  border-bottom: 1px solid #edf2f7;
+  padding: 20px 18px 16px;
+  border-bottom: 1px solid #e8eef6;
 }
 
 .brand {
@@ -259,10 +260,10 @@ function logout() {
   width: 40px;
   height: 40px;
   flex-shrink: 0;
-  border-radius: 8px;
+  border-radius: 12px;
   overflow: hidden;
   background: #fff;
-  box-shadow: 0 0 0 1px #dfe7f1, 0 8px 18px rgba(15, 23, 42, 0.06);
+  box-shadow: 0 0 0 1px #d8e3f0, 0 10px 22px rgba(15, 23, 42, 0.08);
 }
 .brand-icon img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .brand-text { display: flex; flex-direction: column; }
@@ -283,9 +284,10 @@ function logout() {
 .nav-group-title {
   padding: 0 10px 8px;
   color: #64748b;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 800;
-  letter-spacing: 0;
+  letter-spacing: .08em;
+  text-transform: uppercase;
 }
 
 .nav-item {
@@ -294,21 +296,21 @@ function logout() {
   gap: 10px;
   min-height: 48px;
   padding: 8px 9px;
-  border-radius: 8px;
-  margin-bottom: 3px;
+  border-radius: 10px;
+  margin-bottom: 4px;
   text-decoration: none;
   color: #64748b;
   transition: all 0.2s ease;
   position: relative;
 }
 .nav-item:hover {
-  background: #f6f9fd;
-  color: #334155;
+  background: #f3f7fc;
+  color: #1e3a5f;
 }
 .nav-item.active {
-  background: #eef2ff;
-  color: #4338ca;
-  box-shadow: inset 0 0 0 1px #c7d2fe;
+  background: linear-gradient(135deg, #eff6ff 0%, #eefcff 100%);
+  color: #1d4ed8;
+  box-shadow: inset 0 0 0 1px #bfdbfe, 0 6px 14px rgba(37, 99, 235, .06);
 }
 
 .nav-icon-wrap { flex-shrink: 0; }
@@ -320,7 +322,7 @@ function logout() {
   justify-content: center;
   transition: all 0.2s;
 }
-.nav-icon.indigo { background: #eef2ff; color: #6366f1; }
+.nav-icon.indigo { background: #eff6ff; color: #2563eb; }
 .nav-icon.rose { background: #fff1f2; color: #e11d48; }
 .nav-icon.amber { background: #fffbeb; color: #d97706; }
 .nav-icon.cyan { background: #ecfeff; color: #0891b2; }
@@ -328,7 +330,7 @@ function logout() {
 .nav-icon.slate { background: #f1f5f9; color: #475569; }
 .nav-icon.green { background: #f0fdf4; color: #16a34a; }
 
-.nav-item.active .nav-icon.indigo { background: #6366f1; color: #fff; }
+.nav-item.active .nav-icon.indigo { background: #2563eb; color: #fff; }
 .nav-item.active .nav-icon.rose { background: #e11d48; color: #fff; }
 .nav-item.active .nav-icon.amber { background: #d97706; color: #fff; }
 .nav-item.active .nav-icon.cyan { background: #0891b2; color: #fff; }
@@ -339,7 +341,7 @@ function logout() {
 .nav-content { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
 .nav-label { font-size: 13px; font-weight: 700; }
 .nav-desc { font-size: 11px; color: #94a3b8; margin-top: 0; }
-.nav-item.active .nav-desc { color: #6366f1; }
+.nav-item.active .nav-desc { color: #2563eb; }
 
 .nav-indicator {
   position: absolute;
@@ -347,8 +349,8 @@ function logout() {
   transform: translateY(-50%);
   width: 3px; height: 22px;
   border-radius: 3px;
-  background: #6366f1;
-  box-shadow: none;
+  background: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, .10);
 }
 
 .nav-lock {
@@ -418,7 +420,7 @@ function logout() {
 
 .topbar {
   height: 60px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.88);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
   border-bottom: 1px solid #dfe7f1;
@@ -473,8 +475,9 @@ function logout() {
   padding: 22px 24px;
   overflow-y: auto;
   background:
-    radial-gradient(circle at 16% -12%, rgba(37,99,235,.08), transparent 28%),
-    linear-gradient(180deg, #f7f9fd 0%, #f5f7fb 46%, #f8fafc 100%);
+    radial-gradient(circle at 10% -10%, rgba(37,99,235,.10), transparent 28%),
+    radial-gradient(circle at 100% 0%, rgba(13,148,136,.06), transparent 24%),
+    linear-gradient(180deg, #f8fbff 0%, #f4f7fb 48%, #f8fafc 100%);
 }
 
 .app-footer {
@@ -504,7 +507,7 @@ function logout() {
 
 @media (max-width: 768px) {
   .sidebar {
-    position: fixed; left: -260px; top: 0; bottom: 0;
+    position: fixed; left: -280px; top: 0; bottom: 0;
     z-index: 1001; transition: left 0.3s ease;
     box-shadow: 4px 0 20px rgba(0,0,0,0.1);
   }
