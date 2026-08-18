@@ -1,0 +1,1565 @@
+openapi: 3.0.3
+info:
+  title: ZHIYU-WAF V2 Control Plane API
+  version: 2.0.0
+  description: |
+    ZHIYU-WAF V2 的本地优先安全控制面 API。除公开健康检查、登录与首次初始化接口外，所有 REST 接口均使用 JWT Bearer Token 鉴权。
+
+    控制台前端以 `/api/v1` 作为基础路径。V2 新增的仪表盘、站点、事件与封禁接口统一返回 `{ data, request_id }`；其他兼容接口直接返回其业务 JSON。
+
+    > 安全提示：管理控制台应部署在内网、受控 VPN 或跳板机之后。请勿将带有管理员 JWT、AI 密钥或备份内容的请求示例暴露到公共网络。
+  contact:
+    name: ZHIYU-WAF Maintainers
+    url: https://github.com/JayLee-sre/ZHIYU-WAF
+  license:
+    name: AGPL-3.0
+    url: https://github.com/JayLee-sre/ZHIYU-WAF/blob/main/LICENSE
+servers:
+  - url: http://{host}:{port}
+    description: 本地控制台（默认监听地址）
+    variables:
+      host:
+        default: 127.0.0.1
+        description: WAF 控制台所在主机
+      port:
+        default: '9090'
+        description: 控制台监听端口；请按部署配置替换
+security:
+  - bearerAuth: []
+tags:
+  - name: Public
+    description: 无需认证的健康与监控接口。
+  - name: Authentication
+    description: 登录、密码更新与首次初始化。
+  - name: Dashboard
+    description: 控制台概览、趋势与运行状态。
+  - name: Security Events
+    description: V2 风险事件与本地封禁记录。
+  - name: Attack Logs
+    description: 攻击日志查询、复核与导出。
+  - name: Audit
+    description: 控制台治理操作审计。
+  - name: Rules
+    description: 自定义检测规则与正则辅助验证。
+  - name: Access Control
+    description: IP 黑白名单与地理封锁。
+  - name: Threat Intelligence
+    description: 外部威胁情报状态与同步。
+  - name: Sites
+    description: V2 多站反向代理与防护模式。
+  - name: AI
+    description: OpenAI 兼容的本地 AI 检测配置、统计和规则建议。
+  - name: SSH Monitoring
+    description: SSH 暴力破解监控统计与事件。
+  - name: Settings
+    description: 本地防护设置与受控配置重载。
+  - name: Backup
+    description: 可迁移的本地控制面备份与恢复。
+  - name: Certificates
+    description: TLS 证书扫描与重新加载。
+  - name: Users
+    description: 仅管理员可调用的控制台用户管理。
+paths:
+  /health:
+    get:
+      tags: [Public]
+      summary: 基础健康检查
+      security: []
+      responses:
+        '200':
+          description: 服务可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+  /metrics:
+    get:
+      tags: [Public]
+      summary: Prometheus 指标
+      security: []
+      responses:
+        '200':
+          description: Prometheus 文本格式指标
+          content:
+            text/plain:
+              schema:
+                type: string
+  /api/v1/auth/login:
+    post:
+      tags: [Authentication]
+      summary: 控制台登录并获取 JWT
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '429':
+          description: 同一来源在五分钟窗口内连续失败五次后触发十五分钟锁定
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+  /api/v1/auth/password:
+    post:
+      tags: [Authentication]
+      summary: 修改当前已登录用户密码
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+  /api/v1/setup/status:
+    get:
+      tags: [Authentication]
+      summary: 查询首次初始化状态
+      security: []
+      responses:
+        '200':
+          description: 初始化状态
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [needed]
+                properties:
+                  needed:
+                    type: boolean
+                    description: 是否仍需要完成初始化
+  /api/v1/setup/password:
+    post:
+      tags: [Authentication]
+      summary: 设置首次初始化管理员密码
+      description: 初始化已完成后本接口返回 403；密码至少 12 个字符。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password:
+                  type: string
+                  format: password
+                  minLength: 12
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/setup/apply:
+    post:
+      tags: [Authentication]
+      summary: 应用首次安装配置
+      description: 完成代理、AI、限流与 SSH 配置，并在成功后返回可直接使用的管理员 JWT。
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetupApplyRequest'
+      responses:
+        '200':
+          description: 配置已应用
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/StatusResponseBody'
+                  - type: object
+                    properties:
+                      token: { type: string, description: 自动登录 JWT }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/dashboard/summary:
+    get:
+      tags: [Dashboard]
+      summary: 获取 V2 安全概览
+      parameters:
+        - $ref: '#/components/parameters/Range'
+      responses:
+        '200':
+          description: 时间窗口内的安全概览
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/V2Envelope' }
+        '400': { $ref: '#/components/responses/V2BadRequest' }
+  /api/v1/dashboard/timeseries:
+    get:
+      tags: [Dashboard]
+      summary: 获取 V2 时间序列
+      parameters:
+        - $ref: '#/components/parameters/Range'
+      responses:
+        '200':
+          description: 按小时或天聚合的趋势数据
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/V2Envelope' }
+        '400': { $ref: '#/components/responses/V2BadRequest' }
+  /api/v1/system/status:
+    get:
+      tags: [Dashboard]
+      summary: 获取 V2 控制面运行状态
+      responses:
+        '200':
+          description: 防火墙、数据库与功能免费状态
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/V2SystemStatus' }
+  /api/v1/health:
+    get:
+      tags: [Dashboard]
+      summary: 获取认证后的详细健康状态
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/stats:
+    get:
+      tags: [Dashboard]
+      summary: 获取兼容统计数据
+      parameters:
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+        - $ref: '#/components/parameters/SiteIDOptional'
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/stats/timeseries:
+    get:
+      tags: [Dashboard]
+      summary: 获取兼容统计时间序列
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, default: 24 }
+        - $ref: '#/components/parameters/SiteIDOptional'
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/events:
+    get:
+      tags: [Security Events]
+      summary: 查询 V2 风险事件
+      parameters:
+        - name: ip
+          in: query
+          schema: { type: string, format: ipv4 }
+        - name: category
+          in: query
+          schema: { type: string }
+        - name: action
+          in: query
+          schema: { type: string, enum: [allow, log, challenge, block] }
+        - $ref: '#/components/parameters/SiteIDOptional'
+        - name: from
+          in: query
+          schema: { type: string, format: date-time }
+        - name: to
+          in: query
+          schema: { type: string, format: date-time }
+        - name: offset
+          in: query
+          schema: { type: integer, minimum: 0, default: 0 }
+        - name: page_size
+          in: query
+          schema: { type: integer, minimum: 1, default: 50 }
+      responses:
+        '200':
+          description: 事件分页结果
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SecurityEventPage' }
+  /api/v1/events/{id}:
+    get:
+      tags: [Security Events]
+      summary: 获取单个 V2 风险事件
+      parameters: [ { $ref: '#/components/parameters/ID' } ]
+      responses:
+        '200':
+          description: 风险事件
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/SecurityEvent' }
+        '404': { $ref: '#/components/responses/V2NotFound' }
+  /api/v1/blocked-ips:
+    get:
+      tags: [Security Events]
+      summary: 列出当前生效的本地封禁 IP
+      responses:
+        '200':
+          description: 当前未过期的封禁记录
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/BlockedIP' }
+    post:
+      tags: [Security Events]
+      summary: 手动封禁 IP
+      description: 依赖 nftables 防火墙可用；`ttl` 使用 Go Duration，例如 `1h30m`。留空表示永久封禁。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBlockedIPRequest'
+      responses:
+        '201':
+          description: 已封禁并保存本地记录
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/BlockedIP' }
+        '400': { $ref: '#/components/responses/V2BadRequest' }
+        '503': { $ref: '#/components/responses/V2ServiceUnavailable' }
+  /api/v1/blocked-ips/{id}:
+    delete:
+      tags: [Security Events]
+      summary: 解除手动或风险驱动封禁
+      parameters: [ { $ref: '#/components/parameters/ID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/V2DeleteResponse' }
+        '404': { $ref: '#/components/responses/V2NotFound' }
+        '503': { $ref: '#/components/responses/V2ServiceUnavailable' }
+  /api/v1/logs:
+    get:
+      tags: [Attack Logs]
+      summary: 查询攻击日志
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: client_ip
+          in: query
+          schema: { type: string }
+        - name: site_id
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema: { type: string, enum: [low, medium, high, critical] }
+        - name: source
+          in: query
+          schema: { type: string }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: 攻击日志分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttackLogPage' }
+  /api/v1/logs/export:
+    get:
+      tags: [Attack Logs]
+      summary: 导出攻击日志
+      parameters:
+        - name: format
+          in: query
+          schema: { type: string, enum: [json, csv], default: json }
+        - name: client_ip
+          in: query
+          schema: { type: string }
+        - name: site_id
+          in: query
+          schema: { type: string }
+        - name: severity
+          in: query
+          schema: { type: string }
+        - name: source
+          in: query
+          schema: { type: string }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: JSON 数组或 CSV 下载流
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AttackLog' }
+            text/csv:
+              schema: { type: string, format: binary }
+  /api/v1/logs/{id}:
+    get:
+      tags: [Attack Logs]
+      summary: 获取单条攻击日志
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200':
+          description: 攻击日志
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AttackLog' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/logs/{id}/reviewed:
+    post:
+      tags: [Attack Logs]
+      summary: 标记攻击日志已复核
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+  /api/v1/logs/{id}/false-positive:
+    post:
+      tags: [Attack Logs]
+      summary: 标记攻击日志为误报
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                add_whitelist: { type: boolean, default: false }
+                note: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/audit/events:
+    get:
+      tags: [Audit]
+      summary: 查询控制台审计事件
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: action
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: actor
+          in: query
+          schema: { type: string }
+        - name: since
+          in: query
+          schema: { type: string, format: date-time }
+        - name: until
+          in: query
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: 审计事件分页结果
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AuditEventPage' }
+  /api/v1/rules:
+    get:
+      tags: [Rules]
+      summary: 列出检测规则
+      responses:
+        '200':
+          description: 规则数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Rule' }
+    post:
+      tags: [Rules]
+      summary: 创建检测规则
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleInput' }
+      responses:
+        '201':
+          description: 已创建规则
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/rules/test:
+    post:
+      tags: [Rules]
+      summary: 测试单个正则表达式
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [pattern, text]
+              properties:
+                pattern: { type: string, example: '(?i)union\\s+select' }
+                text: { type: string, example: 'id=1 UNION SELECT password FROM users' }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/rules/preview:
+    post:
+      tags: [Rules]
+      summary: 预览规则对模拟请求的匹配结果
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [patterns, match_locations]
+              properties:
+                patterns:
+                  type: array
+                  minItems: 1
+                  items: { type: string }
+                match_locations:
+                  type: array
+                  minItems: 1
+                  items: { type: string, enum: [url, body, headers, user_agent] }
+                url: { type: string }
+                body: { type: string }
+                headers: { type: string }
+                user_agent: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/rules/{id}:
+    put:
+      tags: [Rules]
+      summary: 更新检测规则
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RuleInput' }
+      responses:
+        '200':
+          description: 已更新规则
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [Rules]
+      summary: 删除检测规则
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+  /api/v1/iplist:
+    get:
+      tags: [Access Control]
+      summary: 查询 IP 黑白名单
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [blacklist, whitelist], default: blacklist }
+      responses:
+        '200':
+          description: IP 条目数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/IPEntry' }
+    post:
+      tags: [Access Control]
+      summary: 添加 IP 或 CIDR 条目
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IPEntryInput' }
+      responses:
+        '201':
+          description: 已添加条目
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/IPEntry' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/iplist/batch:
+    post:
+      tags: [Access Control]
+      summary: 批量导入 IP 黑白名单
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [list_type, entries]
+              properties:
+                list_type: { type: string, enum: [blacklist, whitelist] }
+                entries:
+                  type: string
+                  description: 每行一个 IP 或 CIDR，可在其后以空白分隔备注
+                  example: '198.51.100.4 已知扫描器\n2001:db8::/32 IPv6 测试范围'
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/iplist/export:
+    get:
+      tags: [Access Control]
+      summary: 导出 IP 黑白名单 CSV
+      parameters:
+        - name: type
+          in: query
+          schema: { type: string, enum: [blacklist, whitelist], default: blacklist }
+      responses:
+        '200':
+          description: CSV 文件流
+          content:
+            text/csv:
+              schema: { type: string, format: binary }
+  /api/v1/iplist/{id}:
+    delete:
+      tags: [Access Control]
+      summary: 删除 IP 条目
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+  /api/v1/geo/rules:
+    get:
+      tags: [Access Control]
+      summary: 列出地理封锁规则
+      responses:
+        '200':
+          description: 地理规则数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/GeoRule' }
+    post:
+      tags: [Access Control]
+      summary: 创建地理封锁规则
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeoRuleInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/geo/rules/{id}:
+    put:
+      tags: [Access Control]
+      summary: 更新地理封锁规则
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GeoRuleInput' }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+    delete:
+      tags: [Access Control]
+      summary: 删除地理封锁规则
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+  /api/v1/threatintel/status:
+    get:
+      tags: [Threat Intelligence]
+      summary: 获取威胁情报状态
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/threatintel/sync:
+    post:
+      tags: [Threat Intelligence]
+      summary: 触发威胁情报同步
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/threatintel/config:
+    put:
+      tags: [Threat Intelligence]
+      summary: 保存威胁情报 API Key
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [api_key]
+              properties:
+                api_key: { type: string, format: password, writeOnly: true }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+  /api/v1/sites:
+    get:
+      tags: [Sites]
+      summary: 列出 V2 代理站点
+      responses:
+        '200':
+          description: 站点数组
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data:
+                        type: array
+                        items: { $ref: '#/components/schemas/V2Site' }
+    post:
+      tags: [Sites]
+      summary: 创建 V2 代理站点
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/V2SiteInput' }
+      responses:
+        '201':
+          description: 已创建站点
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/V2Site' }
+        '400': { $ref: '#/components/responses/V2BadRequest' }
+  /api/v1/sites/{id}:
+    put:
+      tags: [Sites]
+      summary: 更新 V2 代理站点
+      parameters: [ { $ref: '#/components/parameters/ID' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/V2SiteInput' }
+      responses:
+        '200':
+          description: 已更新站点
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/V2Envelope'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/V2Site' }
+        '400': { $ref: '#/components/responses/V2BadRequest' }
+        '404': { $ref: '#/components/responses/V2NotFound' }
+    delete:
+      tags: [Sites]
+      summary: 删除 V2 代理站点
+      parameters: [ { $ref: '#/components/parameters/ID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/V2DeleteResponse' }
+  /api/v1/ai/providers:
+    get:
+      tags: [AI]
+      summary: 获取 AI 提供商与全局策略配置
+      responses:
+        '200':
+          description: API Key 仅返回脱敏值
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AIConfiguration' }
+  /api/v1/ai/providers/{name}:
+    put:
+      tags: [AI]
+      summary: 更新 AI 提供商连接配置
+      parameters:
+        - name: name
+          in: path
+          required: true
+          schema: { type: string, enum: [openai] }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                api_key: { type: string, format: password, writeOnly: true }
+                model: { type: string, example: gpt-4o-mini }
+                base_url: { type: string, format: uri }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/ai/global:
+    put:
+      tags: [AI]
+      summary: 更新 AI 全局策略
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIGlobalUpdate'
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/ai/test:
+    post:
+      tags: [AI]
+      summary: 测试当前 AI 提供商连通性
+      responses:
+        '200':
+          description: 未启用、连通失败与连通成功均可能使用 200 返回，请检查 `status` 字段。
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AITestResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/ai/stats:
+    get:
+      tags: [AI]
+      summary: 获取 AI 检测统计
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/ai/usage:
+    get:
+      tags: [AI]
+      summary: 获取本地 AI 用量计数
+      responses:
+        '200':
+          description: V2 不设置版本配额；`daily_limit` 与 `remaining` 为 null。
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  edition: { type: string, example: free }
+                  today_used: { type: integer }
+                  daily_limit: { type: integer, nullable: true }
+                  remaining: { type: integer, nullable: true }
+                  is_unlimited: { type: boolean, example: true }
+  /api/v1/ai/suggestions:
+    get:
+      tags: [AI]
+      summary: 列出 AI 规则建议
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, default: 24 }
+        - name: min_count
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+        - $ref: '#/components/parameters/SiteIDOptional'
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/ai/suggestions/promote:
+    post:
+      tags: [AI]
+      summary: 将 AI 建议提升为检测规则
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RuleInput'
+      responses:
+        '201':
+          description: 已创建规则
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Rule' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/ai/generate-rule:
+    post:
+      tags: [AI]
+      summary: 根据自然语言生成检测规则建议
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description]
+              properties:
+                description:
+                  type: string
+                  minLength: 1
+                  example: 检测 URL 中常见的 SQL 注入 UNION SELECT 组合
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '500': { $ref: '#/components/responses/InternalError' }
+  /api/v1/ai/threat-profile:
+    get:
+      tags: [AI]
+      summary: 获取攻击威胁画像
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 168, default: 24 }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/ssh/stats:
+    get:
+      tags: [SSH Monitoring]
+      summary: 获取 SSH 监控统计
+      parameters:
+        - name: hours
+          in: query
+          schema: { type: integer, minimum: 1, default: 24 }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/ssh/events:
+    get:
+      tags: [SSH Monitoring]
+      summary: 查询 SSH 监控事件
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: client_ip
+          in: query
+          schema: { type: string }
+        - name: event_type
+          in: query
+          schema: { type: string }
+        - name: username
+          in: query
+          schema: { type: string }
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/settings:
+    get:
+      tags: [Settings]
+      summary: 获取本地设置键值
+      responses:
+        '200':
+          description: 设置键值字典
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Settings' }
+    put:
+      tags: [Settings]
+      summary: 保存本地设置
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Settings' }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/config/reload:
+    post:
+      tags: [Settings]
+      summary: 受控重载本地配置
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/backup/export:
+    get:
+      tags: [Backup]
+      summary: 导出本地控制面备份
+      responses:
+        '200':
+          description: JSON 备份文件；敏感设置会在导出时过滤
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BackupData' }
+  /api/v1/backup/import:
+    post:
+      tags: [Backup]
+      summary: 导入本地控制面备份
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BackupData' }
+      responses:
+        '200':
+          description: 导入计数及逐项错误
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  imported:
+                    type: object
+                    additionalProperties: { type: integer }
+                  errors:
+                    type: array
+                    items: { type: string }
+        '400': { $ref: '#/components/responses/BadRequest' }
+  /api/v1/certs:
+    get:
+      tags: [Certificates]
+      summary: 扫描可用 TLS 证书
+      responses:
+        '200':
+          description: 证书数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Certificate' }
+  /api/v1/certs/reload:
+    post:
+      tags: [Certificates]
+      summary: 重新加载 TLS 证书
+      responses:
+        '200': { $ref: '#/components/responses/AnyJsonResponse' }
+  /api/v1/users:
+    get:
+      tags: [Users]
+      summary: 列出控制台用户
+      description: 仅 `admin` 角色可调用；不会返回密码哈希。
+      responses:
+        '200':
+          description: 用户数组
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Users]
+      summary: 创建控制台用户
+      description: 仅 `admin` 角色可调用；用户名至少 3 个字符，密码至少 12 个字符。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateUserRequest' }
+      responses:
+        '201':
+          description: 用户已创建
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/StatusResponseBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409':
+          description: 用户名已存在
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiError' }
+  /api/v1/users/{id}:
+    delete:
+      tags: [Users]
+      summary: 删除控制台用户
+      description: 仅 `admin` 角色可调用；系统拒绝删除最后一个管理员。
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/users/{id}/password:
+    put:
+      tags: [Users]
+      summary: 重置指定用户密码
+      description: 仅 `admin` 角色可调用。
+      parameters: [ { $ref: '#/components/parameters/StringID' } ]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [password]
+              properties:
+                password: { type: string, format: password, minLength: 12 }
+      responses:
+        '200': { $ref: '#/components/responses/StatusResponse' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/logs/stream:
+    get:
+      tags: [Attack Logs]
+      summary: 攻击日志 WebSocket 流
+      description: 使用 WebSocket 升级连接；当前实现通过 `token` 查询参数传递 JWT，而非 Authorization Header。
+      security: []
+      parameters:
+        - name: token
+          in: query
+          required: true
+          schema: { type: string }
+          description: 已登录用户的 JWT；请仅通过受控 TLS 连接使用。
+      responses:
+        '101':
+          description: WebSocket 协议升级成功
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "在登录或初始化成功后获取。示例：Authorization: Bearer <token>。"
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+      description: V2 SQLite 整数标识。
+    StringID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string }
+      description: 兼容资源的字符串标识。
+    Range:
+      name: range
+      in: query
+      schema: { type: string, enum: [1h, 6h, 24h, 7d, 30d], default: 24h }
+      description: 仪表盘聚合窗口。
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    Limit:
+      name: limit
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 1000, default: 20 }
+    SiteIDOptional:
+      name: site_id
+      in: query
+      schema: { type: integer, format: int64, minimum: 1 }
+  responses:
+    AnyJsonResponse:
+      description: 成功返回业务 JSON。
+      content:
+        application/json:
+          schema: { type: object, additionalProperties: true }
+    StatusResponse:
+      description: 操作成功状态。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/StatusResponseBody' }
+    BadRequest:
+      description: 请求格式、校验或业务约束不满足。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Unauthorized:
+      description: JWT 缺失、已失效或凭据不正确。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    Forbidden:
+      description: 当前角色权限不足或初始化已完成。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    NotFound:
+      description: 目标资源不存在。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    InternalError:
+      description: 服务端处理失败。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ApiError' }
+    V2BadRequest:
+      description: V2 请求校验失败。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/V2ErrorEnvelope' }
+    V2NotFound:
+      description: V2 资源不存在。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/V2ErrorEnvelope' }
+    V2ServiceUnavailable:
+      description: 本地存储或 nftables 防火墙处于降级状态。
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/V2ErrorEnvelope' }
+    V2DeleteResponse:
+      description: V2 资源删除成功。
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: '#/components/schemas/V2Envelope'
+              - type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      id: { type: integer, format: int64 }
+                      deleted: { type: boolean, example: true }
+  schemas:
+    ApiError:
+      type: object
+      properties:
+        error:
+          oneOf:
+            - type: string
+            - type: object
+              additionalProperties: true
+    V2Envelope:
+      type: object
+      required: [data, request_id]
+      properties:
+        data: {}
+        request_id:
+          type: string
+          example: req_37b75078-6cbf-48f6-b8f3-3ec81d6fb2e5
+    V2ErrorEnvelope:
+      type: object
+      required: [error, request_id]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, example: INVALID_RANGE }
+            message: { type: string }
+        request_id: { type: string }
+    HealthResponse:
+      type: object
+      additionalProperties: true
+      example: { status: ok }
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: admin }
+        password: { type: string, format: password, minLength: 12 }
+    TokenResponse:
+      type: object
+      required: [token]
+      properties:
+        token: { type: string, description: JWT access token }
+    ChangePasswordRequest:
+      type: object
+      required: [old_password, new_password]
+      properties:
+        old_password: { type: string, format: password }
+        new_password: { type: string, format: password, minLength: 12 }
+    StatusResponseBody:
+      type: object
+      properties:
+        status: { type: string, example: ok }
+        message: { type: string }
+        id: { type: string }
+    SetupApplyRequest:
+      type: object
+      required: [backend_addr]
+      properties:
+        password: { type: string, format: password, minLength: 12 }
+        backend_addr: { type: string, example: http://127.0.0.1:3000 }
+        listen_port: { type: integer, minimum: 1, maximum: 65535, example: 8080 }
+        ai_enabled: { type: boolean, default: false }
+        api_key: { type: string, format: password, writeOnly: true }
+        ai_model: { type: string, example: gpt-4o-mini }
+        ai_base_url: { type: string, format: uri }
+        rpm: { type: integer, minimum: 1 }
+        burst_size: { type: integer, minimum: 1 }
+        ssh_enabled: { type: boolean }
+        ssh_max_fails: { type: integer, minimum: 1 }
+        ssh_ban_minutes: { type: integer, minimum: 1 }
+    V2SystemStatus:
+      type: object
+      properties:
+        version: { type: string, example: V2 }
+        uptime: { type: number, format: double, description: 进程运行秒数 }
+        firewall: { type: string, example: nftables_active }
+        database: { type: string, example: ok }
+        all_features_free: { type: boolean, example: true }
+    V2Site:
+      type: object
+      required: [id, domain, backend_url, mode, enabled, created_at, updated_at]
+      properties:
+        id: { type: integer, format: int64, readOnly: true }
+        domain: { type: string, example: app.example.com }
+        backend_url: { type: string, format: uri, example: http://127.0.0.1:3000 }
+        mode: { type: string, enum: [monitor, protect, emergency], example: protect }
+        enabled: { type: boolean, default: true }
+        created_at: { type: string, format: date-time, readOnly: true }
+        updated_at: { type: string, format: date-time, readOnly: true }
+    V2SiteInput:
+      type: object
+      required: [domain, backend_url, mode]
+      properties:
+        domain: { type: string, example: app.example.com }
+        backend_url: { type: string, format: uri, example: http://127.0.0.1:3000 }
+        mode: { type: string, enum: [monitor, protect, emergency], default: protect }
+        enabled: { type: boolean, default: true }
+    SecurityEvent:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        request_id: { type: string }
+        site_id: { type: integer, format: int64 }
+        client_ip: { type: string }
+        method: { type: string }
+        host: { type: string }
+        path: { type: string }
+        rule_id: { type: string }
+        category: { type: string }
+        severity: { type: integer, minimum: 0 }
+        confidence: { type: number, format: double, minimum: 0, maximum: 1 }
+        risk_score: { type: integer, minimum: 0 }
+        action: { type: string, enum: [allow, log, challenge, block] }
+        user_agent: { type: string }
+        created_at: { type: string, format: date-time }
+    SecurityEventPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/SecurityEvent' }
+        total: { type: integer }
+        offset: { type: integer }
+        page_size: { type: integer }
+    CreateBlockedIPRequest:
+      type: object
+      required: [ip]
+      properties:
+        ip: { type: string, example: 198.51.100.42 }
+        ttl: { type: string, example: 24h, description: 正 Go Duration；留空表示永久 }
+        reason: { type: string, example: manual containment after incident triage }
+    BlockedIP:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        ip: { type: string }
+        family: { type: integer, enum: [4, 6] }
+        reason: { type: string }
+        score: { type: integer }
+        expires_at: { type: string, format: date-time, nullable: true }
+        permanent: { type: boolean }
+        source: { type: string, enum: [manual, local_risk, provider] }
+        created_at: { type: string, format: date-time }
+    AttackLog:
+      type: object
+      properties:
+        id: { type: string }
+        timestamp: { type: string, format: date-time }
+        client_ip: { type: string }
+        site_id: { type: string }
+        site_name: { type: string }
+        domain: { type: string }
+        region: { type: string }
+        method: { type: string }
+        path: { type: string }
+        headers: { type: string }
+        body_preview: { type: string }
+        rule_id: { type: string }
+        rule_name: { type: string }
+        severity: { type: string }
+        source: { type: string }
+        action: { type: string }
+        ai_reasoning: { type: string }
+        reviewed: { type: boolean }
+        false_positive: { type: boolean }
+    AttackLogPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AttackLog' }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+    AuditEvent:
+      type: object
+      properties:
+        id: { type: string }
+        timestamp: { type: string, format: date-time }
+        actor: { type: string }
+        client_ip: { type: string }
+        action: { type: string }
+        status: { type: string }
+        detail: { type: string }
+    AuditEventPage:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/AuditEvent' }
+        total: { type: integer }
+        page: { type: integer }
+        limit: { type: integer }
+    Rule:
+      allOf:
+        - $ref: '#/components/schemas/RuleInput'
+        - type: object
+          properties:
+            id: { type: string, readOnly: true }
+            created_at: { type: string, format: date-time, readOnly: true }
+            updated_at: { type: string, format: date-time, readOnly: true }
+    RuleInput:
+      type: object
+      required: [name, patterns, match_locations]
+      properties:
+        name: { type: string, minLength: 1, example: SQLi UNION SELECT }
+        description: { type: string }
+        severity: { type: string, enum: [low, medium, high, critical], default: medium }
+        enabled: { type: boolean, default: true }
+        patterns:
+          type: array
+          minItems: 1
+          items: { type: string }
+          example: ['(?i)union\\s+select']
+        match_locations:
+          type: array
+          minItems: 1
+          items: { type: string, enum: [url, body, headers, user_agent] }
+          example: [url, body]
+    IPEntry:
+      allOf:
+        - $ref: '#/components/schemas/IPEntryInput'
+        - type: object
+          properties:
+            id: { type: string, readOnly: true }
+            created_at: { type: string, format: date-time, readOnly: true }
+    IPEntryInput:
+      type: object
+      required: [ip_address, list_type]
+      properties:
+        ip_address: { type: string, example: 198.51.100.0/24 }
+        list_type: { type: string, enum: [blacklist, whitelist] }
+        note: { type: string }
+    GeoRule:
+      allOf:
+        - $ref: '#/components/schemas/GeoRuleInput'
+        - type: object
+          properties:
+            id: { type: string, readOnly: true }
+            created_at: { type: string, format: date-time, readOnly: true }
+    GeoRuleInput:
+      type: object
+      required: [country]
+      properties:
+        country: { type: string, example: China }
+        country_code: { type: string, minLength: 2, maxLength: 2, example: CN }
+        action: { type: string, enum: [block, allow], default: block }
+        enabled: { type: boolean, default: true }
+    AIConfiguration:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        provider: { type: string, enum: [openai] }
+        async_timeout: { type: integer }
+        cache_ttl: { type: integer }
+        max_requests_per_min: { type: integer }
+        fail_open: { type: boolean }
+        high_risk_paths:
+          type: array
+          items: { type: string }
+        providers:
+          type: object
+          additionalProperties:
+            type: object
+            properties:
+              api_key: { type: string, readOnly: true, description: 脱敏 API Key }
+              model: { type: string }
+              base_url: { type: string, format: uri }
+    AIGlobalUpdate:
+      type: object
+      properties:
+        enabled: { type: boolean }
+        provider: { type: string, enum: [openai] }
+        async_timeout: { type: integer, minimum: 1 }
+        cache_ttl: { type: integer, minimum: 0 }
+        max_requests_per_min: { type: integer, minimum: 1 }
+        fail_open: { type: boolean }
+        high_risk_paths:
+          oneOf:
+            - type: string
+              example: /login,/api/auth
+            - type: array
+              items: { type: string }
+    AITestResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [ok, disabled, error] }
+        message: { type: string }
+        provider: { type: string }
+        model: { type: string }
+        latency: { type: integer, description: 毫秒 }
+        response: {}
+    Settings:
+      type: object
+      additionalProperties:
+        type: string
+      example:
+        dynamic_protect: 'true'
+    BackupData:
+      type: object
+      properties:
+        exported_at: { type: string, format: date-time }
+        version: { type: string, example: V2 }
+        rules:
+          type: array
+          items: { $ref: '#/components/schemas/Rule' }
+        ip_entries:
+          type: array
+          items: { $ref: '#/components/schemas/IPEntry' }
+        sites:
+          type: array
+          items: { type: object, additionalProperties: true }
+        geo_rules:
+          type: array
+          items: { $ref: '#/components/schemas/GeoRule' }
+        settings: { $ref: '#/components/schemas/Settings' }
+    Certificate:
+      type: object
+      properties:
+        domain: { type: string }
+        issuer: { type: string }
+        expires_at: { type: string, format: date-time }
+        valid: { type: boolean }
+        path: { type: string }
+    User:
+      type: object
+      properties:
+        id: { type: string }
+        username: { type: string }
+        role: { type: string, enum: [admin, operator, viewer] }
+        created_at: { type: string, format: date-time }
+    CreateUserRequest:
+      type: object
+      required: [username, password, role]
+      properties:
+        username: { type: string, minLength: 3 }
+        password: { type: string, format: password, minLength: 12 }
+        role: { type: string, enum: [admin, operator, viewer], default: operator }
