@@ -2,10 +2,10 @@ package sshmon
 
 import (
 	"bufio"
+	"context"
 	"log"
 	"net"
 	"os"
-	"os/exec"
 	"regexp"
 	"strings"
 	"sync"
@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/geo"
 	"zhiyuwaf/internal/model"
 	"zhiyuwaf/internal/store"
@@ -65,26 +66,26 @@ type ipCounter struct {
 }
 
 type Config struct {
-	Enabled         bool   `yaml:"enabled"`
-	LogPath         string `yaml:"log_path"`
-	MaxFails        int    `yaml:"max_fails"`
-	BanMinutes      int    `yaml:"ban_minutes"`
-	IPTablesEnabled bool   `yaml:"iptables_enabled"`
+	Enabled    bool   `yaml:"enabled"`
+	LogPath    string `yaml:"log_path"`
+	MaxFails   int    `yaml:"max_fails"`
+	BanMinutes int    `yaml:"ban_minutes"`
 }
 
 type Monitor struct {
-	cfg       Config
-	store     store.Storage
-	geo       *geo.Resolver
-	mu        sync.Mutex
-	ipFails   map[string]*ipCounter
-	banned    map[string]time.Time
-	localIPs  map[string]bool
-	done      chan struct{}
-	stopOnce  sync.Once
+	cfg      Config
+	store    store.Storage
+	geo      *geo.Resolver
+	mu       sync.Mutex
+	ipFails  map[string]*ipCounter
+	banned   map[string]time.Time
+	localIPs map[string]bool
+	firewall core.Firewall
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
-func New(cfg Config, s store.Storage, g *geo.Resolver) *Monitor {
+func New(cfg Config, s store.Storage, g *geo.Resolver, firewall core.Firewall) *Monitor {
 	if cfg.MaxFails <= 0 {
 		cfg.MaxFails = 5
 	}
@@ -101,6 +102,7 @@ func New(cfg Config, s store.Storage, g *geo.Resolver) *Monitor {
 		ipFails:  make(map[string]*ipCounter),
 		banned:   make(map[string]time.Time),
 		localIPs: localIPs(),
+		firewall: firewall,
 		done:     make(chan struct{}),
 	}
 }
@@ -153,7 +155,7 @@ func (m *Monitor) Stop() {
 			if parsed == nil {
 				continue
 			}
-			m.unblockIP(ip, iptablesBinaryForIP(parsed), "shutdown cleanup")
+			m.unblockIP(ip, "shutdown cleanup")
 		}
 	})
 }
@@ -358,7 +360,7 @@ func (m *Monitor) recordFailure(ip, username, message string) {
 			m.store.InsertSSHEvent(blockEvent)
 		}
 
-		// Block IP via iptables
+		// Block IP through the V2 Firewall interface.
 		m.mu.Unlock()
 		m.blockIP(ip, region)
 		m.mu.Lock()
@@ -370,40 +372,29 @@ func (m *Monitor) recordFailure(ip, username, message string) {
 }
 
 func (m *Monitor) blockIP(ip string, region string) {
-	if !m.cfg.IPTablesEnabled {
-		return
-	}
-
 	parsed := net.ParseIP(ip)
 	if parsed == nil {
-		log.Printf("SSH iptables: invalid IP skipped: %s", ip)
+		log.Printf("SSH firewall: invalid IP skipped: %s", ip)
 		return
 	}
-	if parsed.IsLoopback() || parsed.IsUnspecified() {
-		log.Printf("SSH iptables: protected local IP skipped: %s", ip)
+	if parsed.IsLoopback() || parsed.IsUnspecified() || m.localIPs[ip] {
+		log.Printf("SSH firewall: protected local IP skipped: %s", ip)
 		return
 	}
-	if m.localIPs[ip] {
-		log.Printf("SSH iptables: local machine IP skipped: %s", ip)
+	if m.firewall == nil {
+		log.Printf("SSH firewall degraded: cannot kernel-block %s", ip)
 		return
 	}
-
-	binary := iptablesBinaryForIP(parsed)
-	cmd := exec.Command(binary, "-C", "INPUT", "-s", ip, "-j", "DROP")
-	if err := cmd.Run(); err == nil {
-		m.scheduleUnblock(ip, binary, region)
+	ttl := time.Duration(m.cfg.BanMinutes) * time.Minute
+	if err := m.firewall.BlockIP(context.Background(), parsed, ttl, "ssh brute-force: "+region); err != nil {
+		log.Printf("SSH firewall block %s failed: %v", ip, err)
 		return
 	}
-	cmd = exec.Command(binary, "-I", "INPUT", "-s", ip, "-j", "DROP")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("SSH iptables block %s failed: %s", ip, string(output))
-		return
-	}
-	log.Printf("SSH iptables: blocked %s (%s) for %dm", ip, region, m.cfg.BanMinutes)
-	m.scheduleUnblock(ip, binary, region)
+	log.Printf("SSH nftables: blocked %s (%s) for %dm", ip, region, m.cfg.BanMinutes)
+	m.scheduleUnblock(ip, region)
 }
 
-func (m *Monitor) scheduleUnblock(ip, binary, region string) {
+func (m *Monitor) scheduleUnblock(ip, region string) {
 	m.mu.Lock()
 	if until, ok := m.banned[ip]; ok && time.Now().Before(until) {
 		m.mu.Unlock()
@@ -421,29 +412,23 @@ func (m *Monitor) scheduleUnblock(ip, binary, region string) {
 		case <-m.done:
 			return
 		case <-timer.C:
-			m.unblockIP(ip, binary, region)
+			m.unblockIP(ip, region)
 		}
 	}()
 }
 
-func (m *Monitor) unblockIP(ip, binary, region string) {
-	cmd := exec.Command(binary, "-D", "INPUT", "-s", ip, "-j", "DROP")
-	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("SSH iptables unblock %s failed: %s", ip, string(output))
-	} else {
-		log.Printf("SSH iptables: unblocked %s (%s)", ip, region)
+func (m *Monitor) unblockIP(ip, region string) {
+	parsed := net.ParseIP(ip)
+	if parsed != nil && m.firewall != nil {
+		if err := m.firewall.UnblockIP(context.Background(), parsed); err != nil {
+			log.Printf("SSH firewall unblock %s failed: %v", ip, err)
+		} else {
+			log.Printf("SSH nftables: unblocked %s (%s)", ip, region)
+		}
 	}
-
 	m.mu.Lock()
 	delete(m.banned, ip)
 	m.mu.Unlock()
-}
-
-func iptablesBinaryForIP(ip net.IP) string {
-	if ip.To4() == nil {
-		return "ip6tables"
-	}
-	return "iptables"
 }
 
 func (m *Monitor) recordEvent(ip, username, eventType, message string) {

@@ -4,12 +4,14 @@ import (
 	"context"
 	"crypto/tls"
 	"log"
+	"net"
 	"net/http"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
 
 	"zhiyuwaf/internal/config"
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/store"
 )
 
@@ -31,8 +33,11 @@ type Server struct {
 	OnCertReload         func()
 
 	// Threat intel syncer
-	ThreatSyncerStatus func() (time.Time, int)
-	ThreatSyncerSync   func()
+	ThreatSyncerStatus     func() (time.Time, int)
+	ThreatSyncerSync       func()
+	FirewallStatusProvider func() core.FirewallStatus
+	FirewallBlock          func(net.IP, time.Duration, string) error
+	FirewallUnblock        func(net.IP) error
 }
 
 func NewServer(cfg *config.Config, s store.Storage) *Server {
@@ -82,6 +87,15 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+// FirewallStatus returns an explicit degraded value until the V2 nftables
+// manager has been wired by the application bootstrap.
+func (s *Server) FirewallStatus() core.FirewallStatus {
+	if s.FirewallStatusProvider != nil {
+		return s.FirewallStatusProvider()
+	}
+	return core.FirewallStatus{Degraded: true, Message: "firewall status unavailable"}
 }
 
 func (s *Server) Hub() *Hub {

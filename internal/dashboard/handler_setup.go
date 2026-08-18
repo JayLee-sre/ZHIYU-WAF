@@ -66,21 +66,19 @@ func (s *Server) handleSetupApply(w http.ResponseWriter, r *http.Request) {
 		// Password (optional, may have been set in step 1)
 		Password string `json:"password"`
 		// Proxy
-		BackendAddr    string `json:"backend_addr"`
-		ListenPort     int    `json:"listen_port"`
-		IPTablesEnable bool   `json:"iptables_enable"`
-		IPTablesPort   int    `json:"iptables_port"`
+		BackendAddr string `json:"backend_addr"`
+		ListenPort  int    `json:"listen_port"`
 		// AI
-		AIEnabled  bool   `json:"ai_enabled"`
-		APIKey     string `json:"api_key"`
-		AIModel    string `json:"ai_model"`
-		AIBaseURL  string `json:"ai_base_url"`
+		AIEnabled bool   `json:"ai_enabled"`
+		APIKey    string `json:"api_key"`
+		AIModel   string `json:"ai_model"`
+		AIBaseURL string `json:"ai_base_url"`
 		// Security
-		RPM          int  `json:"rpm"`
-		BurstSize    int  `json:"burst_size"`
-		SSHEnabled   bool `json:"ssh_enabled"`
-		SSHMaxFails  int  `json:"ssh_max_fails"`
-		SSHBanMins   int  `json:"ssh_ban_minutes"`
+		RPM         int  `json:"rpm"`
+		BurstSize   int  `json:"burst_size"`
+		SSHEnabled  bool `json:"ssh_enabled"`
+		SSHMaxFails int  `json:"ssh_max_fails"`
+		SSHBanMins  int  `json:"ssh_ban_minutes"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -105,10 +103,6 @@ func (s *Server) handleSetupApply(w http.ResponseWriter, r *http.Request) {
 	s.cfg.Proxy.BackendAddr = req.BackendAddr
 	if req.ListenPort > 0 && req.ListenPort <= 65535 {
 		s.cfg.Proxy.ListenAddr = fmt.Sprintf(":%d", req.ListenPort)
-	}
-	s.cfg.Proxy.IPTablesEnable = req.IPTablesEnable
-	if req.IPTablesPort > 0 {
-		s.cfg.Proxy.IPTablesPort = req.IPTablesPort
 	}
 
 	// Apply AI config

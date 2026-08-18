@@ -33,9 +33,6 @@
               <span class="nav-label">{{ item.label }}</span>
               <span class="nav-desc">{{ item.desc }}</span>
             </div>
-            <div class="nav-lock" v-if="item.pro && !isPro">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-            </div>
             <div class="nav-indicator" v-if="route.path === item.path"></div>
           </router-link>
         </div>
@@ -92,7 +89,7 @@
           </transition>
         </router-view>
       </div>
-      <footer class="app-footer">© 2026 小睿科技 版权所有</footer>
+      <footer class="app-footer">ZHIYU-WAF V2 · 本地优先 · 全功能免费</footer>
     </main>
   </div>
   <router-view v-else />
@@ -109,9 +106,9 @@ const route = useRoute()
 const router = useRouter()
 const isLoginPage = computed(() => route.path === '/login')
 const isStandalone = computed(() => route.path === '/login' || route.path === '/soc-dashboard' || route.path === '/setup' || route.path === '/welcome')
-const edition = ref('community')
-const isPro = computed(() => edition.value === 'pro')
-const editionLabel = computed(() => isPro.value ? '专业版' : '社区版')
+const edition = ref('free')
+const isPro = computed(() => true) // 保留注入兼容性，V2 不再设有功能授权门槛。
+const editionLabel = computed(() => 'V2 Free')
 provide('edition', edition)
 provide('isPro', isPro)
 const sidebarOpen = ref(false)
@@ -128,7 +125,7 @@ const menuGroups = [
     items: [
       { path: '/dashboard', label: '安全态势', desc: '风险与拦截总览', icon: Monitor, color: 'indigo' },
       { path: '/logs', label: '攻击日志', desc: '威胁事件追踪', icon: Document, color: 'rose' },
-      { path: '/soc-dashboard', label: '监控大屏', desc: '态势可视化', icon: DataAnalysis, color: 'green', pro: true },
+      { path: '/soc-dashboard', label: '监控大屏', desc: '态势可视化', icon: DataAnalysis, color: 'green' },
     ],
   },
   {
@@ -136,16 +133,16 @@ const menuGroups = [
     items: [
       { path: '/rules', label: '规则引擎', desc: '检测规则管理', icon: SetUp, color: 'amber' },
       { path: '/iplist', label: '访问控制', desc: 'IP 黑白名单', icon: Filter, color: 'cyan' },
-      { path: '/geo', label: '地理封锁', desc: '国家/地区策略', icon: Location, color: 'indigo', pro: true },
-      { path: '/threatintel', label: '威胁情报', desc: '恶意 IP 同步', icon: Warning, color: 'rose', pro: true },
+      { path: '/geo', label: '地理封锁', desc: '国家/地区策略', icon: Location, color: 'indigo' },
+      { path: '/threatintel', label: '威胁情报', desc: '恶意 IP 同步', icon: Warning, color: 'rose' },
     ],
   },
   {
     label: '资产与能力',
     items: [
-      { path: '/sites', label: '站点管理', desc: '多站代理回源', icon: Connection, color: 'green', pro: true },
+      { path: '/sites', label: '站点管理', desc: '多站代理回源', icon: Connection, color: 'green' },
       { path: '/certs', label: 'SSL 证书', desc: 'TLS 证书管理', icon: Lock, color: 'green' },
-      { path: '/ai', label: 'AI 模型', desc: '智能检测配置', icon: Cpu, color: 'violet', pro: true },
+      { path: '/ai', label: 'AI 模型', desc: '智能检测配置', icon: Cpu, color: 'violet' },
     ],
   },
   {
@@ -153,7 +150,7 @@ const menuGroups = [
     items: [
       { path: '/ssh-logs', label: 'SSH 监控', desc: '暴力破解防护', icon: Key, color: 'amber' },
       { path: '/audit', label: '审计日志', desc: '操作记录追踪', icon: List, color: 'cyan' },
-      { path: '/settings', label: '系统设置', desc: '授权与安全配置', icon: Setting, color: 'slate' },
+      { path: '/settings', label: '系统设置', desc: '防护与安全配置', icon: Setting, color: 'slate' },
     ],
   },
 ]
@@ -190,10 +187,10 @@ async function loadHeaderStatus(force = false) {
     systemOk.value = health?.status === 'ok'
     aiEnabled.value = !!health?.ai_enabled
     ruleCount.value = Array.isArray(rules) ? rules.length : 0
-    edition.value = health?.edition === 'pro' ? 'pro' : 'community'
+    edition.value = 'free'
     headerStatusLoadedAt = Date.now()
   }).catch(() => {
-    edition.value = 'community'
+    edition.value = 'free'
     systemOk.value = false
   }).finally(() => {
     statusLoading.value = false
@@ -217,7 +214,7 @@ function logout() {
     type: 'warning',
   }).then(() => {
     clearAuthToken()
-    edition.value = 'community'
+    edition.value = 'free'
     router.push('/login')
   }).catch(() => {})
 }

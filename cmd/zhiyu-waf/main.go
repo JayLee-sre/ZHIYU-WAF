@@ -11,24 +11,28 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"zhiyuwaf/internal/acme"
 	"zhiyuwaf/internal/ai"
 	"zhiyuwaf/internal/ai/openai"
-	"zhiyuwaf/internal/acme"
 	"zhiyuwaf/internal/alert"
 	"zhiyuwaf/internal/config"
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/dashboard"
 	"zhiyuwaf/internal/engine"
+	"zhiyuwaf/internal/firewall/nftables"
 	"zhiyuwaf/internal/geo"
 	"zhiyuwaf/internal/model"
 	"zhiyuwaf/internal/proxy"
 	"zhiyuwaf/internal/sshmon"
 	"zhiyuwaf/internal/store"
 	"zhiyuwaf/internal/threatintel"
+	v2service "zhiyuwaf/internal/v2"
 )
 
 func main() {
@@ -83,20 +87,36 @@ func main() {
 	// Initialize GeoIP resolver
 	geoResolver := geo.NewResolver()
 
-	// Initialize SSH monitor
+	// Initialize the V2 nftables manager. Failure degrades only kernel-level
+	// enforcement; application-layer WAF decisions continue to protect traffic.
+	hostFirewall := nftables.New()
+	if err := hostFirewall.Sync(context.Background()); err != nil {
+		log.Printf("warning: nftables firewall degraded: %v", err)
+	}
+	if sqliteStore, ok := dbStore.(*store.Store); ok {
+		replayV2Blocklist(sqliteStore, hostFirewall)
+	}
+
+	// Initialize SSH monitor through the V2 Firewall interface.
 	sshMonitor := sshmon.New(sshmon.Config{
-		Enabled:         cfg.SSH.Enabled,
-		LogPath:         cfg.SSH.LogPath,
-		MaxFails:        cfg.SSH.MaxFails,
-		BanMinutes:      cfg.SSH.BanMinutes,
-		IPTablesEnabled: cfg.Proxy.IPTablesEnable,
-	}, dbStore, geoResolver)
+		Enabled:    cfg.SSH.Enabled,
+		LogPath:    cfg.SSH.LogPath,
+		MaxFails:   cfg.SSH.MaxFails,
+		BanMinutes: cfg.SSH.BanMinutes,
+	}, dbStore, geoResolver, hostFirewall)
 	sshMonitor.Start()
 	defer sshMonitor.Stop()
 
 	// Create dashboard server and load persisted AI settings
 	dashServer := dashboard.NewServer(cfg, dbStore)
 	dashServer.SetConfigPath(*configPath)
+	dashServer.FirewallStatusProvider = func() core.FirewallStatus { return hostFirewall.Status(context.Background()) }
+	dashServer.FirewallBlock = func(ip net.IP, ttl time.Duration, reason string) error {
+		return hostFirewall.BlockIP(context.Background(), ip, ttl, reason)
+	}
+	dashServer.FirewallUnblock = func(ip net.IP) error {
+		return hostFirewall.UnblockIP(context.Background(), ip)
+	}
 	dashServer.LoadAISettingsFromDB()
 	applyEnvOverrides(cfg)
 
@@ -127,6 +147,18 @@ func main() {
 	whitelist, _ := dbStore.GetIPListMap("whitelist")
 	blacklist, _ := dbStore.GetIPListMap("blacklist")
 	pipeline.UpdateIPLists(whitelist, blacklist)
+
+	// V2 owns the request decision path; the legacy pipeline remains available
+	// only as a migration fallback inside the proxy handler.
+	v2Pipeline, err := v2service.New(v2service.Config{
+		RequestsPerMinute: cfg.Engine.RateLimit.RequestsPerMinute,
+		BurstSize:         cfg.Engine.RateLimit.BurstSize,
+	}, ruleSet)
+	if err != nil {
+		log.Fatalf("failed to initialize V2 pipeline: %v", err)
+	}
+	defer v2Pipeline.Close()
+	v2Pipeline.UpdateIPLists(whitelist, blacklist)
 
 	// Set geo resolver for geo-blocking
 	pipeline.SetGeoResolver(geoResolver)
@@ -172,14 +204,17 @@ func main() {
 		dbRules, _ := dbStore.ListRules()
 		newRuleSet.LoadFromDB(dbRules)
 		pipeline.UpdateRules(newRuleSet)
+		v2Pipeline.UpdateRules(newRuleSet)
 		// Update handler config to avoid stale references
 		handler.UpdateConfig(newCfg.Proxy.BackendAddr, newCfg.Proxy.ReadTimeout, newCfg.Proxy.WriteTimeout, newCfg.Proxy.DynamicProtect)
+		handler.SetTrustedProxies(newCfg.Proxy.TrustedProxies)
 		log.Println("config reloaded")
 	}
 	dashServer.OnIPListChanged = func() {
 		whitelist, _ := dbStore.GetIPListMap("whitelist")
 		blacklist, _ := dbStore.GetIPListMap("blacklist")
 		pipeline.UpdateIPLists(whitelist, blacklist)
+		v2Pipeline.UpdateIPLists(whitelist, blacklist)
 		log.Println("IP lists reloaded")
 	}
 	dashServer.OnSitesChanged = func() {
@@ -334,28 +369,24 @@ func main() {
 		dbRules, _ := dbStore.ListRules()
 		newRuleSet.LoadFromDB(dbRules)
 		pipeline.UpdateRules(newRuleSet)
+		v2Pipeline.UpdateRules(newRuleSet)
 		// Update handler config to avoid stale references
 		handler.UpdateConfig(newCfg.Proxy.BackendAddr, newCfg.Proxy.ReadTimeout, newCfg.Proxy.WriteTimeout, newCfg.Proxy.DynamicProtect)
+		handler.SetTrustedProxies(newCfg.Proxy.TrustedProxies)
 	})
 
-	// Setup iptables
-	// iptables redirects traffic destined for iptablesPort (e.g. 80) to the WAF listen port (e.g. 8080)
-	_, wafPort, _ := parseAddr(cfg.Proxy.ListenAddr)
-	iptablesMgr := proxy.NewIPTablesManager(wafPort, cfg.Proxy.IPTablesEnable)
-	iptablesMgr.SetTLSEnabled(cfg.Proxy.TLSCertFile != "" && cfg.Proxy.TLSKeyFile != "")
-
-	// Log compatibility advice (nginx detection, port conflicts)
-	proxy.LogCompatAdvice(wafPort, cfg.Proxy.IPTablesPort)
-
-	if err := iptablesMgr.Setup(cfg.Proxy.IPTablesPort); err != nil {
-		log.Printf("warning: iptables setup failed: %v (run as root for iptables support)", err)
-	}
-	defer iptablesMgr.Cleanup()
-
-	// Create proxy handler and listener
+	// Create proxy handler and listener. V2 uses explicit reverse-proxy
+	// deployment; nftables is reserved for managed blocklist enforcement.
 	handler = proxy.NewHandler(cfg.Proxy.BackendAddr, pipeline, cfg.Proxy.ReadTimeout, cfg.Proxy.WriteTimeout)
 	handler.SetSiteResolver(siteResolver)
 	handler.SetDynamicProtect(cfg.Proxy.DynamicProtect)
+	handler.SetTrustedProxies(cfg.Proxy.TrustedProxies)
+	handler.SetV2Service(v2Pipeline)
+	if sqliteStore, ok := dbStore.(*store.Store); ok {
+		handler.SetV2DecisionCallback(func(decision *core.Decision, request *core.RequestContext) {
+			persistV2Decision(sqliteStore, hostFirewall, decision, request)
+		})
+	}
 	handler.SetMetricsCallbacks(dashboard.IncrementRequests, dashboard.IncrementBlocked)
 	listener := proxy.NewListener(cfg.Proxy.ListenAddr, cfg.Proxy.TLSListenAddr, handler, cfg.Proxy.TLSCertFile, cfg.Proxy.TLSKeyFile)
 
@@ -379,7 +410,6 @@ func main() {
 			currentAI.Stop()
 		}
 		pipeline.Close()
-		iptablesMgr.Cleanup()
 		os.Exit(0)
 	}()
 
@@ -507,4 +537,116 @@ func setupThreatIntel(cfg *config.Config, dbStore store.Storage, onChanged func(
 	syncer.Start(6 * time.Hour)
 	log.Println("threat intelligence: AbuseIPDB syncer started (every 6h)")
 	return syncer
+}
+
+// persistV2Decision records the privacy-minimized V2 event and only then
+// delegates qualifying Block decisions to the dedicated nftables Firewall.
+// Persistence or firewall failures are isolated from the active request path.
+func persistV2Decision(db *store.Store, firewall core.Firewall, decision *core.Decision, request *core.RequestContext) {
+	if db == nil || decision == nil || request == nil || request.ClientIP == nil {
+		return
+	}
+	first := core.Detection{}
+	if len(decision.Detections) > 0 {
+		first = decision.Detections[0]
+	}
+	event := model.SecurityEvent{
+		RequestID:  request.RequestID,
+		SiteID:     request.SiteID,
+		ClientIP:   request.ClientIP.String(),
+		Method:     request.Method,
+		Host:       request.Host,
+		Path:       request.Path,
+		RuleID:     first.RuleID,
+		Category:   first.Category,
+		Severity:   first.Severity,
+		Confidence: first.Confidence,
+		RiskScore:  decision.Risk.Score,
+		Action:     string(decision.Action),
+		UserAgent:  request.Header.Get("User-Agent"),
+		CreatedAt:  time.Now(),
+	}
+	if err := db.InsertSecurityEvent(event); err != nil {
+		log.Printf("failed to persist V2 security event: %v", err)
+	}
+	if decision.Risk.Score > 0 {
+		if err := db.RecordRiskEvent(model.RiskEvent{
+			ClientIP:  request.ClientIP.String(),
+			Score:     decision.Risk.Score,
+			Level:     decision.Risk.Level,
+			Reason:    strings.Join(decision.Risk.Reasons, "; "),
+			Action:    string(decision.Action),
+			CreatedAt: time.Now(),
+		}); err != nil {
+			log.Printf("failed to persist V2 risk event: %v", err)
+		}
+	}
+	if decision.Action != core.ActionBlock || firewall == nil {
+		return
+	}
+	ttl := v2BlockTTL(decision.Risk.Score)
+	expiresAt := time.Now().Add(ttl)
+	family := 6
+	if request.ClientIP.To4() != nil {
+		family = 4
+	}
+	if err := db.UpsertBlockedIP(model.BlockedIP{
+		IP:        request.ClientIP.String(),
+		Family:    family,
+		Reason:    strings.Join(decision.Risk.Reasons, "; "),
+		Score:     decision.Risk.Score,
+		ExpiresAt: &expiresAt,
+		Source:    "local",
+		CreatedAt: time.Now(),
+	}); err != nil {
+		log.Printf("failed to persist V2 blocklist entry: %v", err)
+	}
+	if err := firewall.BlockIP(context.Background(), request.ClientIP, ttl, "risk score "+strconv.Itoa(decision.Risk.Score)); err != nil {
+		log.Printf("V2 firewall degraded, application block remains active: %v", err)
+	}
+}
+
+func v2BlockTTL(score int) time.Duration {
+	switch {
+	case score >= 98:
+		return 24 * time.Hour
+	case score >= 92:
+		return time.Hour
+	default:
+		return 10 * time.Minute
+	}
+}
+
+func replayV2Blocklist(db *store.Store, firewall core.Firewall) {
+	if db == nil || firewall == nil {
+		return
+	}
+	now := time.Now()
+	entries, err := db.ListActiveBlockedIPs(now)
+	if err != nil {
+		log.Printf("failed to load V2 blocklist for replay: %v", err)
+		return
+	}
+	for _, entry := range entries {
+		ip := net.ParseIP(entry.IP)
+		if ip == nil {
+			log.Printf("skip invalid persisted blocklist IP: %q", entry.IP)
+			continue
+		}
+		// A persistent block uses a zero timeout; temporary blocks use only the
+		// remaining duration so a restart never extends the operator's TTL.
+		ttl := time.Duration(0)
+		if entry.ExpiresAt != nil {
+			ttl = time.Until(*entry.ExpiresAt)
+			if ttl <= 0 {
+				continue
+			}
+		}
+		if err := firewall.BlockIP(context.Background(), ip, ttl, entry.Reason); err != nil {
+			log.Printf("failed to replay blocklist IP %s: %v", entry.IP, err)
+		}
+	}
+	if len(entries) > 0 {
+		log.Printf("replayed %d active V2 blocklist entries", len(entries))
+	}
 }

@@ -12,6 +12,7 @@ type Site struct {
 	ChallengeEnabled bool      `json:"challenge_enabled"`
 	MaintenanceMode  bool      `json:"maintenance_mode"`
 	SiteType         string    `json:"site_type"`
+	Mode             string    `json:"mode"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }

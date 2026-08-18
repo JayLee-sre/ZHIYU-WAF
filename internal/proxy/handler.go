@@ -11,13 +11,17 @@ import (
 	"net"
 	"net/http"
 	"net/http/httputil"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
 
+	"zhiyuwaf/internal/clientip"
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/engine"
 	"zhiyuwaf/internal/model"
+	v2service "zhiyuwaf/internal/v2"
 )
 
 const maxInspectableBodyBytes int64 = 2 << 20 // 2 MiB
@@ -30,13 +34,16 @@ type handlerConfig struct {
 }
 
 type Handler struct {
-	mu              sync.RWMutex
-	cfg             handlerConfig
-	pipeline        *engine.Pipeline
-	siteResolver    SiteResolver
-	sharedTransport *http.Transport
-	onRequest       func() // optional metrics callback
-	onBlocked       func() // optional metrics callback
+	mu               sync.RWMutex
+	cfg              handlerConfig
+	pipeline         *engine.Pipeline
+	siteResolver     SiteResolver
+	sharedTransport  *http.Transport
+	onRequest        func() // optional metrics callback
+	onBlocked        func() // optional metrics callback
+	v2Service        *v2service.Service
+	onV2Decision     func(*core.Decision, *core.RequestContext)
+	clientIPResolver *clientip.Resolver
 }
 
 type SiteRoute struct {
@@ -48,6 +55,7 @@ type SiteRoute struct {
 	ChallengeEnabled bool
 	MaintenanceMode  bool
 	SiteType         string
+	Mode             string
 }
 
 type SiteResolver interface {
@@ -85,6 +93,36 @@ func (h *Handler) SetDynamicProtect(enabled bool) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.cfg.dynamicProtect = enabled
+}
+
+// SetV2Service enables the V2 decision pipeline. When not set, the handler
+// retains the legacy pipeline for a controlled migration path.
+// SetTrustedProxies configures the only peers allowed to supply client IP
+// forwarding headers. Invalid config is logged and falls back to peer IPs.
+func (h *Handler) SetTrustedProxies(proxies []string) {
+	resolver, err := clientip.New(proxies)
+	if err != nil {
+		log.Printf("invalid trusted proxy configuration: %v", err)
+		return
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.clientIPResolver = resolver
+}
+
+func (h *Handler) SetV2Service(service *v2service.Service) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.v2Service = service
+}
+
+// SetV2DecisionCallback receives completed V2 decisions asynchronously from
+// the request path. It is intended for event persistence and optional firewall
+// enforcement, never for additional request-time detection.
+func (h *Handler) SetV2DecisionCallback(callback func(*core.Decision, *core.RequestContext)) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.onV2Decision = callback
 }
 
 func (h *Handler) SetMetricsCallbacks(onRequest, onBlocked func()) {
@@ -184,22 +222,68 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		parsed.Domain = route.Domain
 		parsed.SkipAI = !route.AIEnabled
 	}
+	if parsed.Domain == "" {
+		parsed.Domain = normalizeHost(r.Host)
+	}
 
 	// Run detection pipeline
 	ctx, cancel := context.WithTimeout(r.Context(), cfg.readTimeout)
 	defer cancel()
 
-	result := h.pipeline.Inspect(ctx, parsed)
-	if result != nil && result.Blocked {
-		if h.pipeline.IsObservationMode() {
-			// Observation mode: log but don't block
-			log.Printf("OBSERVE %s [%s] %s: %s (would block)", result.RuleID, result.Severity, result.RuleName, result.Message)
-		} else {
-			if onBlocked != nil {
-				onBlocked()
+	h.mu.RLock()
+	v2Pipeline := h.v2Service
+	onV2Decision := h.onV2Decision
+	h.mu.RUnlock()
+	if v2Pipeline != nil {
+		decision, normalized, err := v2Pipeline.Inspect(ctx, parsed)
+		if err != nil {
+			// V2 follows the local fail-open operational principle: a pipeline
+			// fault is visible in logs but never makes the protected site fail.
+			log.Printf("V2 pipeline error: %v", err)
+		} else if decision != nil {
+			if onV2Decision != nil {
+				go onV2Decision(decision, normalized)
 			}
-			h.serveBlockedHTTP(w, result)
-			return
+			monitorOnly := route != nil && route.Mode == "monitor"
+			switch decision.Action {
+			case core.ActionBlock:
+				if h.pipeline.IsObservationMode() || monitorOnly {
+					log.Printf("OBSERVE V2 %s risk=%d (would block; mode=%s)", decision.RequestID, decision.Risk.Score, routeMode(route))
+
+				} else {
+					if onBlocked != nil {
+						onBlocked()
+					}
+					h.serveBlockedHTTP(w, legacyDecisionResult(decision))
+					return
+				}
+			case core.ActionRateLimit:
+				if h.pipeline.IsObservationMode() || monitorOnly {
+					log.Printf("OBSERVE V2 %s risk=%d (would rate limit; mode=%s)", decision.RequestID, decision.Risk.Score, routeMode(route))
+
+				} else {
+					if onBlocked != nil {
+						onBlocked()
+					}
+					w.Header().Set("Retry-After", "60")
+					http.Error(w, "Too Many Requests", http.StatusTooManyRequests)
+					return
+				}
+			}
+		}
+	} else {
+		result := h.pipeline.Inspect(ctx, parsed)
+		if result != nil && result.Blocked {
+			if h.pipeline.IsObservationMode() {
+				// Observation mode: log but don't block
+				log.Printf("OBSERVE %s [%s] %s: %s (would block)", result.RuleID, result.Severity, result.RuleName, result.Message)
+			} else {
+				if onBlocked != nil {
+					onBlocked()
+				}
+				h.serveBlockedHTTP(w, result)
+				return
+			}
 		}
 	}
 
@@ -230,6 +314,30 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 // forwardRequestHTTP forwards the request to the backend and writes the response.
 // If dynamic protection is enabled and the response is HTML, it injects a mutation script.
+func routeMode(route *SiteRoute) string {
+	if route == nil || route.Mode == "" {
+		return "protect"
+	}
+	return route.Mode
+}
+
+func legacyDecisionResult(decision *core.Decision) *engine.DetectionResult {
+	result := &engine.DetectionResult{Blocked: true, RuleID: "V2-RISK", RuleName: "V2 Risk Engine", Severity: decision.Risk.Level, Source: "v2", Message: strings.Join(decision.Risk.Reasons, "; ")}
+	if len(decision.Detections) > 0 {
+		first := decision.Detections[0]
+		if first.RuleID != "" {
+			result.RuleID = first.RuleID
+		}
+		if first.Name != "" {
+			result.RuleName = first.Name
+		}
+		if first.Message != "" {
+			result.Message = first.Message
+		}
+	}
+	return result
+}
+
 func (h *Handler) forwardRequestHTTP(w http.ResponseWriter, r *http.Request, backendAddr string, dynamicProtect bool) {
 	// Create a reverse proxy that reuses a shared Transport
 	proxy := &httputil.ReverseProxy{
@@ -416,7 +524,7 @@ func (h *Handler) buildParsedRequest(r *http.Request, timeout time.Duration) (*m
 	return &model.ParsedRequest{
 		ID:          uuid.New().String(),
 		Timestamp:   time.Now(),
-		ClientIP:    extractRealClientIPFromReq(r),
+		ClientIP:    h.resolveClientIP(r),
 		Method:      r.Method,
 		URL:         r.URL.String(),
 		Path:        r.URL.Path,
@@ -457,6 +565,18 @@ func (h *Handler) serveBlockedHTTP(w http.ResponseWriter, result *engine.Detecti
 }
 
 // extractRealClientIPFromReq gets the real client IP, checking X-Forwarded-For / X-Real-IP
+func (h *Handler) resolveClientIP(r *http.Request) string {
+	h.mu.RLock()
+	resolver := h.clientIPResolver
+	h.mu.RUnlock()
+	if resolver != nil {
+		if ip := resolver.Resolve(r); ip != nil {
+			return ip.String()
+		}
+	}
+	return extractRealClientIPFromReq(r)
+}
+
 func extractRealClientIPFromReq(r *http.Request) string {
 	peerIP := r.RemoteAddr
 	if host, _, err := net.SplitHostPort(peerIP); err == nil {

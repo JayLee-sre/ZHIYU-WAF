@@ -13,7 +13,6 @@ import (
 type Config struct {
 	Proxy     ProxyConfig     `yaml:"proxy"`
 	Dashboard DashboardConfig `yaml:"dashboard"`
-	License   LicenseConfig   `yaml:"license"`
 	AI        AIConfig        `yaml:"ai"`
 	Engine    EngineConfig    `yaml:"engine"`
 	Storage   StorageConfig   `yaml:"storage"`
@@ -22,19 +21,18 @@ type Config struct {
 }
 
 type ProxyConfig struct {
-	ListenAddr      string   `yaml:"listen_addr"`
-	TLSListenAddr   string   `yaml:"tls_listen_addr"`
-	BackendAddr     string   `yaml:"backend_addr"`
-	TLSCertFile     string   `yaml:"tls_cert_file"`
-	TLSKeyFile      string   `yaml:"tls_key_file"`
-	ACMEEnabled     bool     `yaml:"acme_enabled"`
-	ACMEEmail       string   `yaml:"acme_email"`
-	ACMEDomains     []string `yaml:"acme_domains"`
-	DynamicProtect  bool     `yaml:"dynamic_protect"`
-	IPTablesEnable  bool     `yaml:"iptables_enable"`
-	IPTablesPort    int      `yaml:"iptables_port"`
-	ReadTimeout     int      `yaml:"read_timeout"`
-	WriteTimeout    int      `yaml:"write_timeout"`
+	ListenAddr     string   `yaml:"listen_addr"`
+	TLSListenAddr  string   `yaml:"tls_listen_addr"`
+	BackendAddr    string   `yaml:"backend_addr"`
+	TLSCertFile    string   `yaml:"tls_cert_file"`
+	TLSKeyFile     string   `yaml:"tls_key_file"`
+	ACMEEnabled    bool     `yaml:"acme_enabled"`
+	ACMEEmail      string   `yaml:"acme_email"`
+	ACMEDomains    []string `yaml:"acme_domains"`
+	DynamicProtect bool     `yaml:"dynamic_protect"`
+	TrustedProxies []string `yaml:"trusted_proxies"`
+	ReadTimeout    int      `yaml:"read_timeout"`
+	WriteTimeout   int      `yaml:"write_timeout"`
 }
 
 type DashboardConfig struct {
@@ -43,17 +41,6 @@ type DashboardConfig struct {
 	CORSOrigins []string `yaml:"cors_origins"`
 	TLSCertFile string   `yaml:"tls_cert_file"`
 	TLSKeyFile  string   `yaml:"tls_key_file"`
-}
-
-// HardcodedEd25519PublicKey is the license verification public key.
-// It is embedded at compile time and cannot be overridden via config file.
-// This prevents attackers from substituting their own key pair in open-source deployments.
-const HardcodedEd25519PublicKey = "OFIQFYlYqgk4wD4GFVRtJEQgeP7lnjN3i2CkTGVbJfg"
-
-type LicenseConfig struct {
-	CenterURL string `yaml:"center_url"`
-	PublicKey string `yaml:"-"` // ignored from YAML; always use HardcodedEd25519PublicKey
-	Timeout   int    `yaml:"timeout"`
 }
 
 type AIConfig struct {
@@ -89,10 +76,10 @@ type OpenAIProvider struct {
 }
 
 type EngineConfig struct {
-	RulesDir         string          `yaml:"rules_dir"`
-	Preset           string          `yaml:"preset"`
-	ObservationMode  bool            `yaml:"observation_mode"`
-	RateLimit        RateLimitConfig `yaml:"rate_limit"`
+	RulesDir        string          `yaml:"rules_dir"`
+	Preset          string          `yaml:"preset"`
+	ObservationMode bool            `yaml:"observation_mode"`
+	RateLimit       RateLimitConfig `yaml:"rate_limit"`
 }
 
 type RateLimitConfig struct {
@@ -101,11 +88,11 @@ type RateLimitConfig struct {
 }
 
 type StorageConfig struct {
-	Type             string `yaml:"type"`              // "sqlite" (default) or "mysql"
-	Path             string `yaml:"path"`              // SQLite db file path
-	DSN              string `yaml:"dsn"`               // MySQL DSN
-	MaxOpenConns     int    `yaml:"max_open_conns"`    // default 25 for MySQL
-	MaxIdleConns     int    `yaml:"max_idle_conns"`    // default 10 for MySQL
+	Type             string `yaml:"type"`           // "sqlite" (default) or "mysql"
+	Path             string `yaml:"path"`           // SQLite db file path
+	DSN              string `yaml:"dsn"`            // MySQL DSN
+	MaxOpenConns     int    `yaml:"max_open_conns"` // default 25 for MySQL
+	MaxIdleConns     int    `yaml:"max_idle_conns"` // default 10 for MySQL
 	LogRetentionDays int    `yaml:"log_retention_days"`
 }
 
@@ -137,8 +124,7 @@ func DefaultConfig() *Config {
 		Proxy: ProxyConfig{
 			ListenAddr:     ":8080",
 			BackendAddr:    "127.0.0.1:80",
-			IPTablesEnable: true,
-			IPTablesPort:   80,
+			TrustedProxies: []string{"127.0.0.1/32", "::1/128"},
 			ReadTimeout:    30,
 			WriteTimeout:   30,
 		},
@@ -147,13 +133,8 @@ func DefaultConfig() *Config {
 			JWTSecret:   "ZhiYu-WAF-secret-change-me",
 			CORSOrigins: []string{"http://localhost:9090"},
 		},
-		License: LicenseConfig{
-			CenterURL: "https://sq.sreai.cloud:3333",
-			PublicKey: HardcodedEd25519PublicKey,
-			Timeout:   8,
-		},
 		AI: AIConfig{
-			Enabled:          true,
+			Enabled:          false,
 			Provider:         "openai",
 			AsyncTimeout:     5,
 			CacheTTL:         300,
@@ -241,9 +222,6 @@ func (c *Config) Validate() error {
 	if c.Proxy.BackendAddr == "" {
 		return fmt.Errorf("proxy.backend_addr is required")
 	}
-	if c.Proxy.IPTablesPort <= 0 {
-		c.Proxy.IPTablesPort = 80
-	}
 	if c.Proxy.ReadTimeout <= 0 {
 		c.Proxy.ReadTimeout = 30
 	}
@@ -253,14 +231,6 @@ func (c *Config) Validate() error {
 	if c.Dashboard.JWTSecret == "ZhiYu-WAF-secret-change-me" {
 		c.Dashboard.JWTSecret = GenerateRandomSecret()
 		log.Println("WARNING: JWT secret was default value, generated random secret (sessions will not persist across restarts)")
-	}
-	if c.License.CenterURL == "" {
-		c.License.CenterURL = "https://sq.sreai.cloud:3333"
-	}
-	// Always enforce the hardcoded public key — config file cannot override it
-	c.License.PublicKey = HardcodedEd25519PublicKey
-	if c.License.Timeout <= 0 {
-		c.License.Timeout = 8
 	}
 	return nil
 }

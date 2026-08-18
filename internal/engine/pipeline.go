@@ -131,8 +131,8 @@ func (p *Pipeline) Inspect(ctx context.Context, req *model.ParsedRequest) *Detec
 		}
 	}
 
-	// Stage 3: Rate Limit (skip for localhost in iptables REDIRECT mode)
-	if req.ClientIP != "127.0.0.1" && req.ClientIP != "::1" && !p.rateLimiter.Allow(req.ClientIP) {
+	// Stage 3: legacy rate-limit fallback. V2 uses a dedicated risk stage.
+	if !p.rateLimiter.Allow(req.ClientIP) {
 		res := &DetectionResult{
 			Blocked:  true,
 			RuleID:   "RATE-LIMIT",

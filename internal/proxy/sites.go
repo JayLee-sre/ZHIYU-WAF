@@ -47,8 +47,9 @@ func (r *MemorySiteResolver) Update(sites []model.Site) {
 				Upstream:         normalizeUpstream(site.Upstream),
 				AIEnabled:        site.AIEnabled,
 				ChallengeEnabled: site.ChallengeEnabled,
-				MaintenanceMode:  site.MaintenanceMode,
+				MaintenanceMode:  site.MaintenanceMode || site.Mode == "emergency",
 				SiteType:         site.SiteType,
+				Mode:             normalizeSiteMode(site.Mode, site.MaintenanceMode),
 			}
 			if strings.HasPrefix(key, "*.") {
 				wildcards = append(wildcards, wildcardSiteRoute{
@@ -84,6 +85,16 @@ func (r *MemorySiteResolver) ResolveSite(host string) (*SiteRoute, bool) {
 		return nil, false
 	}
 	return &route, true
+}
+
+func normalizeSiteMode(mode string, maintenance bool) string {
+	if maintenance || mode == "emergency" {
+		return "emergency"
+	}
+	if mode == "monitor" {
+		return "monitor"
+	}
+	return "protect"
 }
 
 func normalizeHost(host string) string {

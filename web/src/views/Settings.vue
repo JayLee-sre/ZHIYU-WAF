@@ -8,7 +8,7 @@
         </div>
         <div>
           <h1 class="page-title">系统设置</h1>
-          <p class="page-desc">管理授权、密码和系统运维配置</p>
+          <p class="page-desc">管理防护、密码和本地系统运维配置</p>
         </div>
       </div>
       <button class="btn-outline" :disabled="loadingHealth" @click="loadHealth">
@@ -17,72 +17,9 @@
       </button>
     </div>
 
-    <div v-if="upgradeNotice" class="upgrade-notice">
-      <div class="upgrade-notice-icon">
-        <el-icon :size="18"><Key /></el-icon>
-      </div>
-      <div>
-        <strong>{{ upgradeNotice.title }}</strong>
-        <span>{{ upgradeNotice.desc }}</span>
-      </div>
-    </div>
-
-    <!-- 授权面板 (全宽) -->
-    <div class="panel license-panel">
-      <div class="panel-head">
-        <div class="panel-title-group">
-          <div class="panel-icon indigo">
-            <el-icon :size="16"><Key /></el-icon>
-          </div>
-          <h2>授权管理</h2>
-        </div>
-        <span class="edition-badge" :class="{ pro: isPro }">
-          {{ isPro ? '专业版' : '社区版' }}
-        </span>
-      </div>
-
-      <div class="license-body">
-        <div class="license-status-card" :class="{ active: isPro }">
-          <div class="license-status-icon">
-            <el-icon :size="28"><CircleCheck v-if="isPro" /><Key v-else /></el-icon>
-          </div>
-          <div class="license-status-info">
-            <strong>{{ isPro ? (licenseInfo.customer || '专业版已激活') : '当前为社区版' }}</strong>
-            <span>{{ licenseSummary }}</span>
-          </div>
-          <div class="license-metrics-row">
-            <div class="license-metric">
-              <span class="metric-label">授权状态</span>
-              <strong class="metric-value">{{ licenseStatusText }}</strong>
-            </div>
-            <div class="license-metric">
-              <span class="metric-label">剩余天数</span>
-              <strong class="metric-value">{{ remainingDaysText }}</strong>
-            </div>
-            <div class="license-metric">
-              <span class="metric-label">版本类型</span>
-              <strong class="metric-value">{{ isPro ? '专业版' : '社区版' }}</strong>
-            </div>
-            <div class="license-metric">
-              <span class="metric-label">到期时间</span>
-              <strong class="metric-value">{{ isPro ? formatDateTime(licenseInfo.expires_at) : '-' }}</strong>
-            </div>
-          </div>
-        </div>
-
-        <div v-if="!isPro" class="activate-section">
-          <div class="activate-hint">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16" height="16"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-            <span>升级专业版解锁 AI 检测、地理封锁、站点管理等高级功能</span>
-          </div>
-          <div class="activate-form">
-            <input v-model.trim="licenseKey" placeholder="请输入授权码" autocomplete="off" class="activate-input" />
-            <button class="activate-btn" :disabled="activating || !licenseKey" @click="activateLicense">
-              {{ activating ? '校验中...' : '激活授权' }}
-            </button>
-          </div>
-        </div>
-      </div>
+    <div class="free-features-note">
+      <el-icon :size="16"><CircleCheck /></el-icon>
+      <span>V2 已开放全部功能，无需授权码或联网激活。</span>
     </div>
 
     <!-- 两列布局 -->
@@ -248,7 +185,7 @@
       </div>
 
       <!-- 用户管理 -->
-      <div v-if="isPro" class="panel full-width">
+      <div class="panel full-width">
         <div class="panel-head">
           <div class="panel-title-group">
             <div class="panel-icon cyan">
@@ -299,31 +236,15 @@
         </div>
       </div>
 
-      <ProFeatureGate
-        v-else
-        compact
-        class="full-width"
-        title="多用户与 RBAC"
-        description="升级后可创建操作员和只读账号，支持团队协作、权限隔离与审计追踪。"
-        feature-key="users"
-        :features="['操作员账号', '只读审计账号', '权限隔离']"
-      />
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, ref, reactive, inject, onMounted } from 'vue'
-import { useRoute, useRouter } from 'vue-router'
+import { computed, ref, reactive, onMounted } from 'vue'
 import { CircleCheck, Hide, Key, RefreshRight, View, Setting, Plus } from '@element-plus/icons-vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import api from '../api'
-import ProFeatureGate from '../components/ProFeatureGate.vue'
-
-const route = useRoute()
-const router = useRouter()
-const edition = inject('edition', ref('community'))
-const isPro = computed(() => edition.value === 'pro')
 
 const health = ref({})
 const loadingHealth = ref(false)
@@ -333,9 +254,7 @@ const showConfirm = ref(false)
 const changingPwd = ref(false)
 const reloading = ref(false)
 const checkingUpdate = ref(false)
-const activating = ref(false)
 const savingSettings = ref(false)
-const licenseKey = ref('')
 const pwdForm = reactive({ old_password: '', new_password: '' })
 const pwdConfirm = ref('')
 const settingsForm = reactive({ http2: false, dynamicProtect: false })
@@ -349,50 +268,6 @@ const showCreateUser = ref(false)
 const creatingUser = ref(false)
 const newUser = reactive({ username: '', password: '', role: 'operator' })
 const adminCount = computed(() => users.value.filter(u => u.role === 'admin').length)
-const upgradeNotice = computed(() => {
-  const reason = route.query.upgrade
-  if (!reason) return null
-  const messages = {
-    professional_required: {
-      title: '该功能需要专业版授权',
-      desc: '输入授权码并完成激活后，即可继续使用专业版能力。',
-    },
-    feature_not_licensed: {
-      title: '当前授权未包含该功能',
-      desc: '请检查授权范围，或联系开发者升级授权套餐。',
-    },
-    license_unusable: {
-      title: '授权状态需要处理',
-      desc: '当前授权不可用，请检查机器绑定、到期时间或网络连通性。',
-    },
-  }
-  return messages[reason] || messages.professional_required
-})
-
-const licenseInfo = computed(() => health.value.license || {})
-const licenseStatusText = computed(() => {
-  if (isPro.value) return '已激活'
-  if (licenseInfo.value.status && licenseInfo.value.status !== 'community') return '授权异常'
-  return '未激活'
-})
-const licenseSummary = computed(() => {
-  if (!isPro.value) return '输入授权码后自动绑定当前机器并升级专业版'
-  const expires = formatDateTime(licenseInfo.value.expires_at)
-  return remainingDays.value === null ? `到期：${expires}` : `到期：${expires}，剩余 ${remainingDays.value} 天`
-})
-const remainingDays = computed(() => {
-  const value = licenseInfo.value.expires_at
-  if (!value) return null
-  const expires = new Date(value).getTime()
-  if (Number.isNaN(expires)) return null
-  return Math.max(0, Math.ceil((expires - Date.now()) / 86400000))
-})
-const remainingDaysText = computed(() => {
-  if (!isPro.value) return '-'
-  if (remainingDays.value === null) return '未知'
-  return `${remainingDays.value} 天`
-})
-
 async function loadHealth() {
   loadingHealth.value = true
   try {
@@ -401,35 +276,13 @@ async function loadHealth() {
       api.get('/settings', { suppressError: true }),
     ])
     health.value = h || {}
-    edition.value = h?.edition === 'pro' ? 'pro' : 'community'
     if (settings) {
       settingsForm.dynamicProtect = settings.dynamic_protect === 'true'
     }
   } catch {
-    edition.value = 'community'
     health.value = {}
   } finally {
     loadingHealth.value = false
-  }
-}
-
-async function activateLicense() {
-  if (!licenseKey.value) return
-  activating.value = true
-  try {
-    const r = await api.post('/license/activate', { license_key: licenseKey.value })
-    ElMessage.success(r.message || '授权已激活')
-    edition.value = r.edition === 'pro' ? 'pro' : 'community'
-    licenseKey.value = ''
-    if (route.query.upgrade) {
-      router.replace({ path: '/settings' })
-    }
-    await loadHealth()
-    if (isPro.value) {
-      await loadUsers()
-    }
-  } finally {
-    activating.value = false
   }
 }
 
@@ -550,10 +403,6 @@ function importLabel(key) {
 }
 
 async function loadUsers() {
-  if (!isPro.value) {
-    users.value = []
-    return
-  }
   try { users.value = await api.get('/users') || [] } catch { users.value = [] }
 }
 

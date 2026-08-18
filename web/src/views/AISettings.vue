@@ -14,18 +14,16 @@
         <div class="heading-icon violet"><el-icon :size="18"><Cpu /></el-icon></div>
         <div>
           <div class="page-heading">AI 模型配置</div>
-          <div class="page-sub">AI 驱动的智能检测引擎，与规则引擎协同实现双重防护</div>
+          <div class="page-sub">可选异步辅助能力；核心规则与风险防护不依赖外部 AI 服务</div>
         </div>
       </div>
       <div class="header-right">
-        <span class="edition-badge" :class="isPro ? 'pro' : 'community'">
-          {{ isPro ? '专业版' : '社区版' }}
-        </span>
+        <span class="edition-badge pro">V2 免费功能</span>
       </div>
     </div>
 
-    <!-- 用量卡片 (社区版显示) -->
-    <div class="usage-banner" v-if="!isPro">
+    <!-- AI 调用只做本地计数，不存在套餐额度限制。 -->
+    <div class="usage-banner" v-if="false">
       <div class="usage-left">
         <div class="usage-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="22" height="22"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
@@ -44,7 +42,7 @@
         <div class="usage-remaining">
           剩余 <b>{{ aiUsage.remaining || 0 }}</b> 次
         </div>
-        <router-link to="/settings" class="upgrade-link">升级专业版解锁无限调用</router-link>
+        <span class="upgrade-link">调用量仅用于本地可观测性，不会触发套餐限制。</span>
       </div>
     </div>
 
@@ -70,8 +68,8 @@
       </div>
     </div>
 
-    <!-- Pro 专属: AI 统计 -->
-    <div class="kpi-row" v-if="isPro">
+    <!-- AI 统计 -->
+    <div class="kpi-row">
       <div class="kpi-card" v-for="k in kpiCards" :key="k.key">
         <div class="kpi-val" :style="{ color: k.color }">{{ k.value }}</div>
         <div class="kpi-label">{{ k.label }}</div>
@@ -248,27 +246,6 @@
       </div>
     </template>
 
-    <!-- 社区版: Pro 功能预览 -->
-    <div class="pro-preview" v-if="!isPro">
-      <div class="preview-header">
-        <span class="preview-kicker">专业版功能</span>
-        <h3>解锁 AI 全部能力</h3>
-      </div>
-      <div class="preview-grid">
-        <div class="preview-card" v-for="f in proFeatures" :key="f.name">
-          <div class="preview-icon" :class="f.color">
-            <el-icon :size="18"><component :is="f.icon" /></el-icon>
-          </div>
-          <div>
-            <b>{{ f.name }}</b>
-            <span>{{ f.desc }}</span>
-          </div>
-        </div>
-      </div>
-      <div class="preview-footer">
-        <router-link to="/settings" class="btn-primary">前往升级专业版</router-link>
-      </div>
-    </div>
   </div>
 </template>
 

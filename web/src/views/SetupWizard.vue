@@ -40,7 +40,7 @@
       <div class="step-body" v-if="step === 1">
         <div class="step-kicker">业务接入</div>
         <h2>告诉 WAF 你的业务服务在哪里</h2>
-        <p class="step-desc">建议先使用本机端口验证链路，确认无误后再切换到正式回源和端口转发。</p>
+        <p class="step-desc">请先通过上游反向代理将测试流量转发到 WAF，确认回源与规则行为后再切换正式入口。</p>
         <div class="form-group">
           <label>后端地址 <span class="required">*</span></label>
           <el-input v-model="form.backendAddr" placeholder="例如: 127.0.0.1:8080" size="large" />
@@ -53,17 +53,15 @@
             <span class="field-hint">WAF 代理监听的端口，默认 8080</span>
           </div>
           <div class="form-group">
-            <label>iptables 端口</label>
-            <el-input-number v-model="form.iptablesPort" :min="1" :max="65535" size="large" style="width: 100%" />
-            <span class="field-hint">将此端口流量重定向到 WAF，默认 80</span>
+            <label>上游接入</label>
+            <div class="field-hint static-hint">V2 不接管业务端口；请在 Nginx、负载均衡或网关中将流量转发到此 WAF 监听端口。</div>
           </div>
         </div>
-        <div class="option-card" :class="{ active: form.iptablesEnable }">
+        <div class="option-card active">
           <div>
-            <strong>自动接管 80 端口流量</strong>
-            <span>需要 root 权限和 iptables，建议生产服务器确认端口占用后再开启。</span>
+            <strong>nftables 恶意 IP 封禁</strong>
+            <span>V2 只管理独立 nftables 表。缺少内核权限时会降级为应用层阻断，不影响回源服务。</span>
           </div>
-          <el-switch v-model="form.iptablesEnable" />
         </div>
       </div>
 
@@ -171,8 +169,8 @@
             <strong :class="form.sshEnabled ? 'text-green' : 'text-muted'">{{ form.sshEnabled ? '已启用' : '未启用' }}</strong>
           </div>
           <div class="summary-item">
-            <span class="summary-label">iptables</span>
-            <strong :class="form.iptablesEnable ? 'text-green' : 'text-muted'">{{ form.iptablesEnable ? '已启用' : '未启用' }}</strong>
+            <span class="summary-label">内核封禁</span>
+            <strong class="text-green">nftables（可降级）</strong>
           </div>
         </div>
       </div>
@@ -208,8 +206,6 @@ const form = ref({
   confirmPassword: '',
   backendAddr: '127.0.0.1:80',
   listenPort: 8080,
-  iptablesEnable: false,
-  iptablesPort: 80,
   aiEnabled: false,
   apiKey: '',
   aiModel: '',
@@ -254,8 +250,6 @@ async function applySetup() {
       password: f.password,
       backend_addr: f.backendAddr,
       listen_port: f.listenPort,
-      iptables_enable: f.iptablesEnable,
-      iptables_port: f.iptablesPort,
       ai_enabled: f.aiEnabled,
       api_key: f.apiKey,
       ai_model: f.aiModel,

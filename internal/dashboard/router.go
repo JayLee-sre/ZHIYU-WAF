@@ -54,7 +54,16 @@ func (s *Server) setupRouter() *chi.Mux {
 	r.Group(func(r chi.Router) {
 		r.Use(JWTAuth(s.cfg.Dashboard.JWTSecret))
 
-		// Stats
+		// V2 API: unified REST JSON contract for Dashboard and CLI clients.
+		r.Get("/api/v1/dashboard/summary", s.handleV2DashboardSummary)
+		r.Get("/api/v1/dashboard/timeseries", s.handleV2DashboardTimeSeries)
+		r.Get("/api/v1/events", s.handleV2ListEvents)
+		r.Get("/api/v1/events/{id}", s.handleV2GetEvent)
+		r.Get("/api/v1/blocked-ips", s.handleV2ListBlockedIPs)
+		r.Post("/api/v1/blocked-ips", s.handleV2CreateBlockedIP)
+		r.Delete("/api/v1/blocked-ips/{id}", s.handleV2DeleteBlockedIP)
+		r.Get("/api/v1/system/status", s.handleV2SystemStatus)
+
 		// Health (authenticated, detailed)
 		r.Get("/api/v1/health", s.handleHealthDetail)
 
@@ -84,43 +93,32 @@ func (s *Server) setupRouter() *chi.Mux {
 		r.Get("/api/v1/iplist/export", s.handleExportIPList)
 		r.Delete("/api/v1/iplist/{id}", s.handleRemoveIP)
 
-		// Geo-blocking (professional edition)
-		r.Group(func(r chi.Router) {
-			r.Use(s.RequireProfessionalFeature("geo"))
-			r.Get("/api/v1/geo/rules", s.handleListGeoRules)
-			r.Post("/api/v1/geo/rules", s.handleAddGeoRule)
-			r.Put("/api/v1/geo/rules/{id}", s.handleUpdateGeoRule)
-			r.Delete("/api/v1/geo/rules/{id}", s.handleRemoveGeoRule)
-		})
+		// Geo-blocking is a free V2 feature.
+		r.Get("/api/v1/geo/rules", s.handleListGeoRules)
+		r.Post("/api/v1/geo/rules", s.handleAddGeoRule)
+		r.Put("/api/v1/geo/rules/{id}", s.handleUpdateGeoRule)
+		r.Delete("/api/v1/geo/rules/{id}", s.handleRemoveGeoRule)
 
 		// Threat Intelligence
 		r.Get("/api/v1/threatintel/status", s.handleGetThreatIntelStatus)
 		r.Post("/api/v1/threatintel/sync", s.handleSyncThreatIntel)
 		r.Put("/api/v1/threatintel/config", s.handleUpdateThreatIntelConfig)
 
-		// Sites (professional edition)
-		r.Group(func(r chi.Router) {
-			r.Use(s.RequireProfessionalFeature("sites"))
-			r.Get("/api/v1/sites", s.handleListSites)
-			r.Post("/api/v1/sites", s.handleCreateSite)
-			r.Put("/api/v1/sites/{id}", s.handleUpdateSite)
-			r.Delete("/api/v1/sites/{id}", s.handleDeleteSite)
-		})
-
-		// AI (professional edition)
-		r.Group(func(r chi.Router) {
-			r.Use(s.RequireProfessionalFeature("ai"))
-			r.Get("/api/v1/ai/providers", s.handleGetAIProviders)
-			r.Put("/api/v1/ai/providers/{name}", s.handleUpdateAIProvider)
-			r.Put("/api/v1/ai/global", s.handleUpdateAIGlobal)
-			r.Post("/api/v1/ai/test", s.handleTestAI)
-			r.Get("/api/v1/ai/stats", s.handleGetAIStats)
-			r.Get("/api/v1/ai/usage", s.handleGetAIUsage)
-			r.Get("/api/v1/ai/suggestions", s.handleListAISuggestions)
-			r.Post("/api/v1/ai/suggestions/promote", s.handlePromoteAISuggestion)
-			r.Post("/api/v1/ai/generate-rule", s.handleGenerateRule)
-			r.Get("/api/v1/ai/threat-profile", s.handleThreatProfile)
-		})
+		// V2 site API uses integer SQLite identities and monitor/protect/emergency modes.
+		r.Get("/api/v1/sites", s.handleV2ListSites)
+		r.Post("/api/v1/sites", s.handleV2CreateSite)
+		r.Put("/api/v1/sites/{id}", s.handleV2UpdateSite)
+		r.Delete("/api/v1/sites/{id}", s.handleV2DeleteSite)
+		r.Get("/api/v1/ai/providers", s.handleGetAIProviders)
+		r.Put("/api/v1/ai/providers/{name}", s.handleUpdateAIProvider)
+		r.Put("/api/v1/ai/global", s.handleUpdateAIGlobal)
+		r.Post("/api/v1/ai/test", s.handleTestAI)
+		r.Get("/api/v1/ai/stats", s.handleGetAIStats)
+		r.Get("/api/v1/ai/usage", s.handleGetAIUsage)
+		r.Get("/api/v1/ai/suggestions", s.handleListAISuggestions)
+		r.Post("/api/v1/ai/suggestions/promote", s.handlePromoteAISuggestion)
+		r.Post("/api/v1/ai/generate-rule", s.handleGenerateRule)
+		r.Get("/api/v1/ai/threat-profile", s.handleThreatProfile)
 
 		// SSH monitoring
 		r.Get("/api/v1/ssh/stats", s.handleGetSSHStats)
@@ -133,9 +131,6 @@ func (s *Server) setupRouter() *chi.Mux {
 		r.Get("/api/v1/settings", s.handleGetSettings)
 		r.Put("/api/v1/settings", s.handleUpdateSettings)
 		r.Post("/api/v1/config/reload", s.handleReloadConfig)
-
-		// License
-		r.Post("/api/v1/license/activate", s.handleActivateLicense)
 
 		// Backup / Restore
 		r.Get("/api/v1/backup/export", s.handleExportBackup)

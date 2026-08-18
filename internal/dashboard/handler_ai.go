@@ -309,23 +309,19 @@ func (s *Server) IncrementAIUsage() {
 	s.store.SetSetting(key, fmt.Sprintf("%d", count))
 }
 
-// IsCommunityAIAllowed checks if community edition can make an AI call.
-func (s *Server) IsCommunityAIAllowed() bool {
-	if s.currentEdition() == "pro" {
-		return true
-	}
-	return s.GetTodayAIUsage() < communityDailyAILimit
-}
+// IsCommunityAIAllowed is retained for compatibility with existing analyzer
+// wiring. V2 has no edition-based quota: AI availability is controlled only by
+// the local administrator's provider configuration and resilience settings.
+func (s *Server) IsCommunityAIAllowed() bool { return true }
 
 func (s *Server) handleGetAIUsage(w http.ResponseWriter, r *http.Request) {
-	edition := s.currentEdition()
 	usage := s.GetTodayAIUsage()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"edition":      edition,
+		"edition":      "free",
 		"today_used":   usage,
-		"daily_limit":  communityDailyAILimit,
-		"remaining":    communityDailyAILimit - usage,
-		"is_pro":       edition == "pro",
+		"daily_limit":  nil,
+		"remaining":    nil,
+		"is_unlimited": true,
 	})
 }
 

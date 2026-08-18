@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Store) ListSites() ([]model.Site, error) {
-	rows, err := s.db.Query(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, COALESCE(mode, 'protect'), created_at, updated_at FROM sites ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -27,7 +27,7 @@ func (s *Store) ListSites() ([]model.Site, error) {
 }
 
 func (s *Store) ListEnabledSites() ([]model.Site, error) {
-	rows, err := s.db.Query(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites WHERE enabled = 1 ORDER BY created_at DESC`)
+	rows, err := s.db.Query(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, COALESCE(mode, 'protect'), created_at, updated_at FROM sites WHERE enabled = 1 ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
 	}
@@ -44,7 +44,7 @@ func (s *Store) ListEnabledSites() ([]model.Site, error) {
 }
 
 func (s *Store) GetSite(id string) (*model.Site, error) {
-	row := s.db.QueryRow(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at FROM sites WHERE id = ?`, id)
+	row := s.db.QueryRow(`SELECT id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, COALESCE(mode, 'protect'), created_at, updated_at FROM sites WHERE id = ?`, id)
 	site, err := scanSite(row)
 	if err == sql.ErrNoRows {
 		return nil, nil
@@ -58,16 +58,16 @@ func (s *Store) GetSite(id string) (*model.Site, error) {
 func (s *Store) CreateSite(site model.Site) error {
 	domainsJSON, _ := json.Marshal(normalizeDomains(site.Domains))
 	now := time.Now()
-	_, err := s.db.Exec(`INSERT INTO sites(id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, created_at, updated_at)
-		VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		site.ID, site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, now, now)
+	_, err := s.db.Exec(`INSERT INTO sites(id, name, domains, upstream, enabled, ai_enabled, challenge_enabled, maintenance_mode, site_type, mode, created_at, updated_at)
+			VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		site.ID, site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, defaultSiteMode(site.Mode), now, now)
 	return err
 }
 
 func (s *Store) UpdateSite(site model.Site) error {
 	domainsJSON, _ := json.Marshal(normalizeDomains(site.Domains))
-	_, err := s.db.Exec(`UPDATE sites SET name=?, domains=?, upstream=?, enabled=?, ai_enabled=?, challenge_enabled=?, maintenance_mode=?, site_type=?, updated_at=? WHERE id=?`,
-		site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, time.Now(), site.ID)
+	_, err := s.db.Exec(`UPDATE sites SET name=?, domains=?, upstream=?, enabled=?, ai_enabled=?, challenge_enabled=?, maintenance_mode=?, site_type=?, mode=?, updated_at=? WHERE id=?`,
+		site.Name, string(domainsJSON), site.Upstream, site.Enabled, site.AIEnabled, site.ChallengeEnabled, site.MaintenanceMode, site.SiteType, defaultSiteMode(site.Mode), time.Now(), site.ID)
 	return err
 }
 
@@ -83,12 +83,19 @@ type siteScanner interface {
 func scanSite(row siteScanner) (model.Site, error) {
 	var site model.Site
 	var domainsJSON string
-	err := row.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.MaintenanceMode, &site.SiteType, &site.CreatedAt, &site.UpdatedAt)
+	err := row.Scan(&site.ID, &site.Name, &domainsJSON, &site.Upstream, &site.Enabled, &site.AIEnabled, &site.ChallengeEnabled, &site.MaintenanceMode, &site.SiteType, &site.Mode, &site.CreatedAt, &site.UpdatedAt)
 	if err != nil {
 		return site, err
 	}
 	_ = json.Unmarshal([]byte(domainsJSON), &site.Domains)
 	return site, nil
+}
+
+func defaultSiteMode(mode string) string {
+	if mode == "monitor" || mode == "protect" || mode == "emergency" {
+		return mode
+	}
+	return "protect"
 }
 
 func normalizeDomains(domains []string) []string {

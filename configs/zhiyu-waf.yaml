@@ -1,37 +1,39 @@
+# ZHIYU-WAF V2 local-first configuration.
 proxy:
+  # Let your existing ingress proxy / load balancer route traffic to this port.
   listen_addr: ":8080"
   backend_addr: "127.0.0.1:80"
-  iptables_enable: true
-  iptables_port: 80
   read_timeout: 30
   write_timeout: 30
-  dynamic_protect: false  # enable HTML response mutation (anti-scraping)
-  # TLS termination: uncomment to enable HTTPS + HTTP/2
+  dynamic_protect: false
+  # Forwarded headers are honored only from these direct peers.
+  trusted_proxies:
+    - "127.0.0.1/32"
+    - "::1/128"
+  # TLS termination is optional; keep certificates outside the repository.
   # tls_cert_file: "/opt/zhiyu-waf/certs/fullchain.pem"
   # tls_key_file: "/opt/zhiyu-waf/certs/privkey.pem"
 
 dashboard:
   listen_addr: ":9090"
-  jwt_secret: "ZhiYu-WAF-secret-change-me"
+  # Leave blank on first run to generate a random local secret, or set via a secret manager.
+  jwt_secret: ""
   cors_origins:
     - "http://localhost:9090"
     - "http://127.0.0.1:9090"
 
-license:
-  center_url: "https://sq.sreai.cloud:3333"
-  timeout: 8
-
+# AI is optional, asynchronous, and fail-open. The V2 core never requires an external API.
 ai:
-  enabled: true
+  enabled: false
   provider: "openai"
   async_timeout: 5
   cache_ttl: 300
   max_requests_per_min: 60
   fail_open: true
-  per_ip_rate: 10       # per-IP AI call limit per minute
-  per_ip_burst: 2       # per-IP burst limit
-  circuit_threshold: 5  # consecutive failures to trigger circuit breaker
-  circuit_reset: 30     # circuit breaker probe interval (seconds)
+  per_ip_rate: 10
+  per_ip_burst: 2
+  circuit_threshold: 5
+  circuit_reset: 30
   providers:
     openai:
       api_key: ""
@@ -44,6 +46,7 @@ engine:
     requests_per_minute: 60
     burst_size: 10
 
+# SSH brute-force blocks use the same V2 nftables interface and local SQLite audit trail.
 ssh:
   enabled: true
   log_path: ""

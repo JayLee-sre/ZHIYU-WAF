@@ -1,40 +1,60 @@
 package sshmon
 
 import (
+	"context"
 	"net"
 	"path/filepath"
 	"testing"
+	"time"
 
+	"zhiyuwaf/internal/core"
 	"zhiyuwaf/internal/model"
 	"zhiyuwaf/internal/store"
 )
 
-func TestProcessLineAcceptedLoginDoesNotPanic(t *testing.T) {
-	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, nil, nil)
+type fakeFirewall struct {
+	blocked []net.IP
+}
 
+func (f *fakeFirewall) BlockIP(_ core.Context, ip net.IP, _ time.Duration, _ string) error {
+	f.blocked = append(f.blocked, append(net.IP(nil), ip...))
+	return nil
+}
+func (f *fakeFirewall) UnblockIP(_ core.Context, _ net.IP) error         { return nil }
+func (f *fakeFirewall) IsBlocked(_ core.Context, _ net.IP) (bool, error) { return false, nil }
+func (f *fakeFirewall) Sync(_ core.Context) error                        { return nil }
+func (f *fakeFirewall) Status(_ core.Context) core.FirewallStatus {
+	return core.FirewallStatus{Available: true}
+}
+
+func TestProcessLineAcceptedLoginDoesNotPanic(t *testing.T) {
+	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, nil, nil, nil)
 	m.processLine("May 15 10:00:00 host sshd[123]: Accepted password for root from 203.0.113.10 port 55222 ssh2")
 }
 
-func TestIPTablesBinaryForIP(t *testing.T) {
-	if got := iptablesBinaryForIP(net.ParseIP("203.0.113.10")); got != "iptables" {
-		t.Fatalf("expected iptables for IPv4, got %q", got)
-	}
-	if got := iptablesBinaryForIP(net.ParseIP("2001:db8::1")); got != "ip6tables" {
-		t.Fatalf("expected ip6tables for IPv6, got %q", got)
-	}
-}
-
 func TestBlockIPSkipsInvalidAndLocalAddresses(t *testing.T) {
-	m := New(Config{Enabled: true, MaxFails: 1, BanMinutes: 1, IPTablesEnabled: true}, nil, nil)
-
+	firewall := &fakeFirewall{}
+	m := New(Config{Enabled: true, MaxFails: 1, BanMinutes: 1}, nil, nil, firewall)
 	m.blockIP("not-an-ip", "")
 	m.blockIP("127.0.0.1", "")
 	m.blockIP("::1", "")
+	if len(firewall.blocked) != 0 {
+		t.Fatalf("protected or invalid addresses must not reach firewall: %#v", firewall.blocked)
+	}
+}
+
+func TestBlockIPUsesFirewallForIPv4AndIPv6(t *testing.T) {
+	firewall := &fakeFirewall{}
+	m := New(Config{Enabled: true, MaxFails: 1, BanMinutes: 1}, nil, nil, firewall)
+	m.blockIP("203.0.113.10", "test")
+	m.blockIP("2001:db8::1", "test")
+	if len(firewall.blocked) != 2 {
+		t.Fatalf("expected both address families to be sent to firewall, got %#v", firewall.blocked)
+	}
 }
 
 func TestStopIsIdempotent(t *testing.T) {
-	m := New(Config{Enabled: true, MaxFails: 1, BanMinutes: 1}, nil, nil)
-
+	m := New(Config{Enabled: true, MaxFails: 1, BanMinutes: 1}, nil, nil, nil)
 	m.Stop()
 	m.Stop()
 }
@@ -42,14 +62,11 @@ func TestStopIsIdempotent(t *testing.T) {
 func TestSuccessfulLoginFromWhitelistIsNotLogged(t *testing.T) {
 	s := newTestStore(t)
 	defer s.Close()
-
 	if err := s.AddIPEntry(model.IPEntry{ID: "wl-1", IPAddress: "203.0.113.10", ListType: "whitelist"}); err != nil {
 		t.Fatalf("add whitelist: %v", err)
 	}
-
-	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, s, nil)
+	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, s, nil, nil)
 	m.processLine("May 15 10:00:00 host sshd[123]: Accepted password for root from 203.0.113.10 port 55222 ssh2")
-
 	events, total, err := s.ListSSHEvents(0, 10, "", "", "")
 	if err != nil {
 		t.Fatalf("list events: %v", err)
@@ -62,14 +79,11 @@ func TestSuccessfulLoginFromWhitelistIsNotLogged(t *testing.T) {
 func TestFailedLoginFromWhitelistIsLogged(t *testing.T) {
 	s := newTestStore(t)
 	defer s.Close()
-
 	if err := s.AddIPEntry(model.IPEntry{ID: "wl-1", IPAddress: "203.0.113.10", ListType: "whitelist"}); err != nil {
 		t.Fatalf("add whitelist: %v", err)
 	}
-
-	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, s, nil)
+	m := New(Config{Enabled: true, MaxFails: 3, BanMinutes: 1}, s, nil, nil)
 	m.processLine("May 15 10:00:00 host sshd[123]: Failed password for root from 203.0.113.10 port 55222 ssh2")
-
 	events, total, err := s.ListSSHEvents(0, 10, "", "", "")
 	if err != nil {
 		t.Fatalf("list events: %v", err)
@@ -90,3 +104,6 @@ func newTestStore(t *testing.T) *store.Store {
 	}
 	return s
 }
+
+var _ core.Firewall = (*fakeFirewall)(nil)
+var _ = context.Background

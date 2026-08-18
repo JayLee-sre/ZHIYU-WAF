@@ -60,8 +60,8 @@ server {
     }
 }
 
-# Alternative: iptables transparent mode (no nginx config needed)
-# The WAF can redirect port 80/443 traffic directly via iptables.
+# V2 manages temporary malicious-IP blocks through its dedicated nftables table.
+# Keep normal ingress routing under your existing proxy or load balancer.
 `, wafAddr)
 }
 
@@ -69,9 +69,7 @@ server {
 func LogCompatAdvice(proxyPort, backendPort int) {
 	if DetectNginx() {
 		log.Println("=== Nginx detected ===")
-		log.Println("Two deployment options:")
-		log.Println("  1. iptables mode (recommended): WAF redirects port traffic automatically")
-		log.Println("  2. nginx reverse proxy: use nginx as frontend, proxy to WAF listen port")
+		log.Println("V2 deployment: use nginx as the frontend and proxy protected traffic to the WAF listen port")
 		log.Printf("  Sample nginx config: proxy_pass http://127.0.0.1:%d;", proxyPort)
 
 		// Check for common conflicts

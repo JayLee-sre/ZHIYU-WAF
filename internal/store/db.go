@@ -129,13 +129,68 @@ func (s *Store) migrate() error {
 	CREATE INDEX IF NOT EXISTS idx_audit_events_action ON audit_events(action);
 	CREATE INDEX IF NOT EXISTS idx_audit_events_client_ip ON audit_events(client_ip);
 
-	CREATE TABLE IF NOT EXISTS users (
-		id            TEXT PRIMARY KEY,
-		username      TEXT NOT NULL UNIQUE,
-		password_hash TEXT NOT NULL,
-		role          TEXT NOT NULL DEFAULT 'viewer',
-		created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
-	);
+			-- V2 local-first security event store. Full request bodies and raw
+		-- credential-bearing headers are never persisted in these tables.
+		CREATE TABLE IF NOT EXISTS events (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			request_id TEXT NOT NULL DEFAULT '',
+			site_id    INTEGER NOT NULL DEFAULT 0,
+			client_ip  TEXT NOT NULL,
+			method     TEXT NOT NULL DEFAULT '',
+			host       TEXT NOT NULL DEFAULT '',
+			path       TEXT NOT NULL DEFAULT '',
+			rule_id    TEXT NOT NULL DEFAULT '',
+			category   TEXT NOT NULL DEFAULT '',
+			severity   INTEGER NOT NULL DEFAULT 0,
+			confidence REAL NOT NULL DEFAULT 0,
+			risk_score INTEGER NOT NULL DEFAULT 0,
+			action     TEXT NOT NULL DEFAULT 'log',
+			user_agent TEXT NOT NULL DEFAULT '',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_events_client_ip_created ON events(client_ip, created_at);
+		CREATE INDEX IF NOT EXISTS idx_events_site_created ON events(site_id, created_at);
+		CREATE INDEX IF NOT EXISTS idx_events_category_created ON events(category, created_at);
+		CREATE INDEX IF NOT EXISTS idx_events_risk_created ON events(risk_score, created_at);
+
+		CREATE TABLE IF NOT EXISTS blocked_ips (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			ip         TEXT NOT NULL UNIQUE,
+			family     INTEGER NOT NULL,
+			reason     TEXT NOT NULL DEFAULT '',
+			score      INTEGER NOT NULL DEFAULT 0,
+			expires_at DATETIME,
+			permanent  BOOLEAN NOT NULL DEFAULT 0,
+			source     TEXT NOT NULL DEFAULT 'local',
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_blocked_ips_expires ON blocked_ips(expires_at);
+
+		CREATE TABLE IF NOT EXISTS risk_events (
+			id         INTEGER PRIMARY KEY AUTOINCREMENT,
+			client_ip  TEXT NOT NULL,
+			score      INTEGER NOT NULL,
+			level      TEXT NOT NULL,
+			reason     TEXT NOT NULL DEFAULT '',
+			action     TEXT NOT NULL,
+			created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+		CREATE INDEX IF NOT EXISTS idx_risk_events_ip_created ON risk_events(client_ip, created_at);
+		CREATE INDEX IF NOT EXISTS idx_risk_events_score_created ON risk_events(score, created_at);
+
+		CREATE TABLE IF NOT EXISTS schema_migrations (
+			version    TEXT PRIMARY KEY,
+			applied_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+		);
+
+		CREATE TABLE IF NOT EXISTS users (
+			id            TEXT PRIMARY KEY,
+			username      TEXT NOT NULL UNIQUE,
+			password_hash TEXT NOT NULL,
+			role          TEXT NOT NULL DEFAULT 'viewer',
+			created_at    DATETIME DEFAULT CURRENT_TIMESTAMP
+		);
+
 	`
 	if _, err := s.db.Exec(schema); err != nil {
 		return err
@@ -151,7 +206,29 @@ func (s *Store) migrate() error {
 	}
 	if err := s.ensureColumns("sites", map[string]string{
 		"maintenance_mode": "ALTER TABLE sites ADD COLUMN maintenance_mode BOOLEAN DEFAULT 0",
+		"domain":           "ALTER TABLE sites ADD COLUMN domain TEXT DEFAULT ''",
+		"backend_url":      "ALTER TABLE sites ADD COLUMN backend_url TEXT DEFAULT ''",
+		"mode":             "ALTER TABLE sites ADD COLUMN mode TEXT DEFAULT 'protect'",
 	}); err != nil {
+		return err
+	}
+	if err := s.ensureColumns("rules", map[string]string{
+		"category":       "ALTER TABLE rules ADD COLUMN category TEXT DEFAULT ''",
+		"source":         "ALTER TABLE rules ADD COLUMN source TEXT DEFAULT 'builtin'",
+		"version":        "ALTER TABLE rules ADD COLUMN version TEXT DEFAULT 'v2'",
+		"severity_score": "ALTER TABLE rules ADD COLUMN severity_score INTEGER DEFAULT 0",
+	}); err != nil {
+		return err
+	}
+	if err := s.ensureColumns("settings", map[string]string{
+		"updated_at": "ALTER TABLE settings ADD COLUMN updated_at DATETIME DEFAULT CURRENT_TIMESTAMP",
+	}); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_sites_domain_v2 ON sites(domain) WHERE domain <> ''"); err != nil {
+		return err
+	}
+	if _, err := s.db.Exec("INSERT OR IGNORE INTO schema_migrations(version) VALUES ('v2_core')"); err != nil {
 		return err
 	}
 

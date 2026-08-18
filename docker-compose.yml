@@ -13,8 +13,10 @@ services:
       - ZHIYU_WAF_OPENAI_API_KEY=${OPENAI_API_KEY:-}
       - ZHIYU_WAF_OPENAI_BASE_URL=${OPENAI_BASE_URL:-}
     cap_add:
-      - NET_ADMIN     # Required for iptables
-    network_mode: host  # Required for transparent iptables REDIRECT; ports are exposed on host directly
+      - NET_ADMIN     # Required only when V2 should synchronize malicious IPs to host nftables.
+    # host networking lets the container manage the host nftables namespace.
+    # Omit NET_ADMIN and use normal ports when application-layer-only protection is sufficient.
+    network_mode: host
 
 volumes:
   waf-data:

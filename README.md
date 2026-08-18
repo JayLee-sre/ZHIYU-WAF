@@ -1,309 +1,143 @@
-<div align="center">
+# ZHIYU-WAF V2
 
-<img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/logo.webp" alt="智域 WAF" width="104">
+**ZHIYU-WAF V2** 是面向自部署场景的本地优先 Web 应用防火墙。它以 Go 反向代理为入口，以统一风险引擎输出单一防护动作，并将短期恶意来源封禁同步到独立的 `nftables` 表。项目**不包含版本授权、在线激活、功能套餐或专业版门控**；已实现的控制面功能均可免费使用。
 
-# 智域 WAF
+> V2 的核心原则是：请求先产生可解释的检测证据，再由风险引擎统一决定 `allow`、`log`、`rate_limit` 或 `block`。外部 AI 属于可选的异步辅助能力，网络故障不会中断核心防护链。
 
-面向中小企业、独立开发者和私有化场景的轻量级 Web 应用防火墙。
-
-把规则防护、访问控制、SSH 暴力破解防护、AI 辅助分析和可视化管理放进一个可自部署的安全网关里。
-
-<br>
-
-![Go](https://img.shields.io/badge/Go-1.25-00ADD8?logo=go&logoColor=white)
-![Vue](https://img.shields.io/badge/Vue-3-42b883?logo=vue.js&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-ready-2496ED?logo=docker&logoColor=white)
-![License](https://img.shields.io/badge/License-AGPL--3.0-green)
-![Release](https://img.shields.io/github/v/release/JayLee-sre/ZHIYU-WAF)
-![WeChat](https://img.shields.io/badge/WeChat-cc8c887-07C160?logo=wechat&logoColor=white)
-
-[快速开始](#快速开始) · [功能能力](#功能能力) · [部署方式](#部署方式) · [版本对比](#版本对比) · [联系开发者](#联系开发者) · [Release](https://github.com/JayLee-sre/ZHIYU-WAF/releases)
-
-</div>
-
----
-
-## 项目定位
-
-智域 WAF 不是一个只展示日志的面板，而是一个可以真正接入业务流量的防护代理。
-
-它默认通过 `iptables REDIRECT` 接管公网入口流量，将请求转发到 WAF 代理端口，再由规则引擎、速率限制、访问控制、地理封锁、威胁情报和 AI 分析共同判断，最后回源到真实业务服务。
-
-适合这些场景：
-
-- 中小型网站、后台系统、API 服务的边界防护
-- 没有完整安全团队，但需要可视化攻击日志和快速封禁能力的业务
-- 希望私有化部署，不把访问日志交给第三方云 WAF 的团队
-- 需要社区版起步，后续平滑升级专业版能力的产品化场景
-
-## 功能能力
-
-| 能力 | 说明 |
+| 组件 | 责任 |
 | --- | --- |
-| 规则引擎 | 内置 SQL 注入、XSS、命令注入、路径穿越、敏感文件探测等常见 Web 攻击规则 |
-| 速率限制 | 按请求频率和突发流量控制异常访问，降低扫描器和爆破流量影响 |
-| IP 黑白名单 | 管理后台实时维护访问控制列表，防护链路立即生效 |
-| 攻击日志 | 记录命中规则、来源 IP、请求路径、严重等级和处理动作 |
-| SSH 防护 | 监控 SSH 登录失败日志，自动封禁暴力破解来源 |
-| SSL/TLS | 支持自定义证书与 ACME 自动证书能力 |
-| AI 辅助分析 | 可接入 OpenAI 兼容接口，对高风险请求进行语义分析和研判 |
-| 威胁情报 | 同步恶意 IP 情报源，并联动黑名单防护 |
-| 地理封锁 | 按国家或地区封禁访问来源 |
-| 多站点管理 | 支持多站点回源配置，适合一套 WAF 管理多个业务 |
-| 审计日志 | 记录关键管理操作，便于追踪配置变更 |
-| 可视化大屏 | 展示安全态势、攻击趋势和防护效果 |
+| V2 Pipeline | 规范化、ACL、频率信号、规则检测、行为画像与统一风险决策 |
+| Rule Engine | 兼容本地 YAML 规则，输出检测证据而非自行阻断 |
+| Risk Engine | 合并证据、抑制同类重复命中、计算风险分数与最终动作 |
+| Firewall | 使用 Go Netlink 管理独立 `nftables` 表与 IPv4/IPv6 超时集合 |
+| SQLite | 保存最小化安全事件、风险事件、站点和封禁状态，并支持重启回放 |
+| Dashboard | Vue 管理控制面，提供趋势、事件、站点、封禁与运行状态视图 |
 
-## 界面预览
+## 已实现能力
 
-<table>
-<tr>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/login.webp" alt="登录页面"></td>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/attack-logs.webp" alt="攻击日志"></td>
-</tr>
-<tr>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/rules-engine.webp" alt="规则引擎"></td>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/ssh-monitor.webp" alt="SSH 监控"></td>
-</tr>
-<tr>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/threat-intel.webp" alt="威胁情报"></td>
-<td width="50%"><img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/access-control.webp" alt="访问控制"></td>
-</tr>
-</table>
-
-<img src="https://cdn.jsdelivr.net/gh/JayLee-sre/ZHIYU-WAF@ef31412/images/preview/settings.webp" alt="系统设置" width="100%">
+| 能力 | V2 行为 |
+| --- | --- |
+| SQL 注入、XSS、命令注入、路径穿越等规则 | 本地规则输出 Detection，由风险层统一判定 |
+| IP 黑白名单与限流 | 作为 ACL/频率证据进入风险链；白名单可跳过后续检测 |
+| 风险动作 | `allow`、`log`、`rate_limit`、`block` 四级动作 |
+| 恶意 IP 封禁 | 高风险或人工封禁写入 SQLite 并同步 `nftables` 超时集合 |
+| IPv4 / IPv6 | 同时支持 IPv4、IPv6 封禁集合与 SSH 暴力破解联动 |
+| 多站点 | 按域名维护回源与 `monitor`、`protect`、`emergency` 模式 |
+| 安全审计 | 事件、风险、封禁和管理操作均通过本地存储查询 |
+| AI 辅助 | 默认关闭、可选配置、异步 fail-open；不依赖外部 AI 才能保护流量 |
+| 免费控制面 | 站点、AI、地理策略、情报、RBAC 与大屏不再存在版本门控 |
 
 ## 快速开始
 
-### Docker Compose
+### 从源码运行
+
+请使用 Go 1.25 或与 `go.mod` 兼容的工具链，并保留 CGO 以支持 SQLite。
 
 ```bash
 git clone https://github.com/JayLee-sre/ZHIYU-WAF.git
 cd ZHIYU-WAF
 
-docker compose up -d
-```
+cd web
+npm ci
+npm run build:raw
+cd ..
+rm -rf internal/dashboard/dist
+cp -R web/dist internal/dashboard/dist
 
-默认入口：
-
-| 服务 | 地址 |
-| --- | --- |
-| 管理后台 | `http://127.0.0.1:9090` |
-| WAF 代理 | `http://127.0.0.1:8080` |
-| 公网入口 | 默认由 `iptables` 将 `80` 转发到 WAF |
-
-首次启动会在日志中输出管理员初始密码：
-
-```bash
-docker logs zhiyu-waf
-```
-
-### 一键安装脚本
-
-适合 Linux 服务器直接部署到 `/opt/zhiyu-waf`：
-
-```bash
-sudo bash scripts/install-zhiyu-waf.sh \
-  --backend 127.0.0.1:3000 \
-  --public-port 80 \
-  --dashboard-port 9090
-```
-
-常用参数：
-
-| 参数 | 说明 |
-| --- | --- |
-| `--backend` | 真实业务服务地址，例如 `127.0.0.1:3000` |
-| `--public-port` | 对外暴露的业务端口，通常是 `80` |
-| `--waf-port` | WAF 代理监听端口，默认 `8080` |
-| `--dashboard-port` | 管理后台端口，默认 `9090` |
-| `--no-iptables` | 不接管公网端口，只启动 WAF 代理 |
-| `--no-firewall` | 不自动修改 firewalld/防火墙规则 |
-
-### 源码构建
-
-```bash
-git clone https://github.com/JayLee-sre/ZHIYU-WAF.git
-cd ZHIYU-WAF
-
-make build
-sudo ./bin/zhiyu-waf -config configs/zhiyu-waf.yaml
-```
-
-也可以分开构建：
-
-```bash
-cd web && npm install && npm run build && cd ..
+CGO_ENABLED=1 go test ./...
 CGO_ENABLED=1 go build -o bin/zhiyu-waf ./cmd/zhiyu-waf
+./bin/zhiyu-waf -config configs/zhiyu-waf.yaml
 ```
 
-## 部署方式
+默认情况下，WAF 监听 `:8080`，管理后台监听 `:9090`。首次运行应立刻修改管理员密码，并将管理端限制在私有网络、跳板机或受控 VPN 中。
 
-### 透明代理模式
+### 反向代理接入
 
-推荐生产部署使用该模式。业务访问 `80`，系统将流量转发到 WAF，再由 WAF 回源到真实服务。
+V2 不再使用 `iptables REDIRECT` 接管业务端口。请让已有的 Nginx、负载均衡器或服务网关将业务流量显式转发到 WAF，再由 WAF 回源到应用服务。
 
 ```text
 Client
-  |
-  | :80
-  v
-iptables REDIRECT
-  |
-  | :8080
-  v
-ZhiYu-WAF
-  |
-  | backend_addr
-  v
-Your Backend
+  │
+  ▼
+Ingress / Nginx / Load Balancer
+  │  forwards to :8080
+  ▼
+ZHIYU-WAF V2 Pipeline
+  │  forwards to backend_addr
+  ▼
+Application Backend
 ```
 
-关键配置：
+Nginx 应传递 `Host`、`X-Real-IP` 与 `X-Forwarded-For`。只有 `proxy.trusted_proxies` 中列出的直接对端才会被信任其转发头；不要将不受控制的公网网段加入该列表。
 
-```yaml
-proxy:
-  listen_addr: ":8080"
-  backend_addr: "127.0.0.1:3000"
-  iptables_enable: true
-  iptables_port: 80
+```nginx
+location / {
+  proxy_pass http://127.0.0.1:8080;
+  proxy_set_header Host $host;
+  proxy_set_header X-Real-IP $remote_addr;
+  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+  proxy_set_header X-Forwarded-Proto $scheme;
+}
 ```
 
-### 反向代理模式
+## 防火墙与降级语义
 
-如果你已经有 Nginx、SLB 或云负载均衡，也可以关闭 `iptables`，让上游代理转发到 WAF。
+V2 的 `nftables` 管理器只操作名为 `zhiyu_waf` 的独立表，并在表内维护 IPv4 与 IPv6 封禁集合。它不调用 `iptables`、`ip6tables` 或任意防火墙 shell 命令。进程需要 `CAP_NET_ADMIN`（或宿主机等效权限）才能写入内核集合。
 
-```yaml
-proxy:
-  listen_addr: ":8080"
-  backend_addr: "127.0.0.1:3000"
-  iptables_enable: false
-```
+如果缺少权限、内核不支持或 Netlink 操作失败，系统会在 Dashboard 报告 **degraded**。此时应用层的风险判定与 HTTP 阻断仍会继续执行，但内核级 IP 封禁不可用。生产上线前应把该状态纳入监控与告警。
 
-### Docker 生产建议
+| 风险分数 | 默认封禁时长 |
+| --- | --- |
+| 85–91 | 10 分钟 |
+| 92–97 | 1 小时 |
+| 98–100 | 24 小时 |
 
-透明代理需要 host 网络和 `NET_ADMIN` 能力：
+重启时，SQLite 中尚未到期的临时封禁会按**剩余**时间回放，不会因为重启而延长 TTL。
 
-```bash
-docker build -t zhiyu-waf:latest .
+## 配置要点
 
-docker run -d \
-  --name zhiyu-waf \
-  --restart unless-stopped \
-  --network host \
-  --cap-add NET_ADMIN \
-  -v "$(pwd)/configs:/opt/zhiyu-waf/configs:ro" \
-  -v zhiyu-waf-data:/opt/zhiyu-waf/data \
-  zhiyu-waf:latest
-```
-
-如果不使用透明代理，请关闭 `iptables_enable`，再按你的网络架构映射端口。
-
-## 配置说明
-
-主配置文件位于 [configs/zhiyu-waf.yaml](configs/zhiyu-waf.yaml)。
+默认配置位于 [configs/zhiyu-waf.yaml](configs/zhiyu-waf.yaml)。
 
 | 配置项 | 说明 |
 | --- | --- |
-| `proxy.listen_addr` | WAF 代理监听地址 |
-| `proxy.backend_addr` | 真实业务回源地址 |
-| `proxy.iptables_enable` | 是否启用本机端口接管 |
+| `proxy.listen_addr` | WAF 监听地址 |
+| `proxy.backend_addr` | 默认回源服务地址 |
+| `proxy.trusted_proxies` | 唯一可影响转发 IP 头的直接代理 CIDR/IP |
 | `dashboard.listen_addr` | 管理后台监听地址 |
-| `dashboard.jwt_secret` | 后台登录令牌密钥，生产环境必须修改 |
-| `dashboard.cors_origins` | 管理后台允许的访问来源 |
-| `engine.rules_dir` | 检测规则目录 |
+| `dashboard.jwt_secret` | 管理会话签名密钥；生产应使用密钥管理系统提供 |
+| `engine.rules_dir` | 本地 YAML 规则目录 |
 | `storage.path` | SQLite 数据文件路径 |
-| `ai.enabled` | 是否启用 AI 辅助分析 |
+| `ai.enabled` | 是否启用可选 AI 辅助；默认 `false` |
 
-生产环境建议：
+## V2 REST API
 
-- 修改 `dashboard.jwt_secret`
-- 将 `dashboard.cors_origins` 改成实际后台域名
-- 限制 `9090` 管理端口的公网访问
-- 为 `data/` 做定期备份
-- 启用 HTTPS 或通过上游网关终止 TLS
-- 先在观察模式或测试流量中验证规则，再接入核心业务
+受 JWT 保护的 V2 API 采用统一封装：成功时返回 `data` 与 `request_id`，失败时返回 `error.code`、`error.message` 与 `request_id`。
 
-## 版本对比
-
-| 功能 | 社区版 | 专业版 |
-| --- | :---: | :---: |
-| 规则引擎 | 支持 | 支持 |
-| 速率限制 | 支持 | 支持 |
-| 攻击日志 | 支持 | 支持 |
-| IP 黑白名单 | 支持 | 支持 |
-| SSH 暴力破解防护 | 支持 | 支持 |
-| SSL/TLS 管理 | 支持 | 支持 |
-| 审计日志 | 支持 | 支持 |
-| AI 辅助分析 | 基础能力 | 高级能力 |
-| 地理封锁 | - | 支持 |
-| 威胁情报同步 | - | 支持 |
-| 多站点管理 | - | 支持 |
-| 多用户与 RBAC | - | 支持 |
-| 安全态势大屏 | - | 支持 |
-| 商业支持 | - | 支持 |
-
-专业版能力用于需要团队协作、多站管理、情报联动和更完整安全运营闭环的场景。具体开通方式请在管理后台的系统设置中查看。
-
-## 联系开发者
-
-欢迎交流部署、商业授权、私有化交付和功能定制。
-
-![WeChat](https://img.shields.io/badge/微信-cc8c887-07C160?logo=wechat&logoColor=white)
-
-## 规则目录
-
-默认规则位于 [configs/rules](configs/rules)：
-
-| 文件 | 说明 |
+| 资源 | 端点 |
 | --- | --- |
-| `sqli.yaml` | SQL 注入检测 |
-| `xss.yaml` | XSS 检测 |
-| `cmdi.yaml` | 命令注入检测 |
-| `traversal.yaml` | 路径穿越检测 |
-| `sensitive.yaml` | 敏感文件与路径检测 |
-| `enterprise.yaml` | 企业级增强规则 |
+| Dashboard 汇总 | `GET /api/v1/dashboard/summary?range=24h` |
+| Dashboard 趋势 | `GET /api/v1/dashboard/timeseries?range=24h` |
+| 事件列表与详情 | `GET /api/v1/events`、`GET /api/v1/events/{id}` |
+| 站点 | `GET/POST /api/v1/sites`、`PUT/DELETE /api/v1/sites/{id}` |
+| 封禁 IP | `GET/POST /api/v1/blocked-ips`、`DELETE /api/v1/blocked-ips/{id}` |
+| 系统状态 | `GET /api/v1/system/status` |
 
-修改规则后，可通过管理后台或重启服务使配置生效。
+## 数据与隐私
 
-## 开发
+安全事件只保存定位、审计与关联所需的字段，例如来源 IP、Host、路径、规则标识、风险分数与动作。完整请求体不写入事件表。接入 AI 前，请独立评估数据脱敏、出网审批、供应商条款和业务数据合规要求。
 
-后端：
+## 生产上线清单
 
-```bash
-go test ./...
-go run ./cmd/zhiyu-waf -config configs/zhiyu-waf.yaml
-```
+在将流量切换到 V2 前，应首先在 `monitor` 模式验证规则命中，再逐站启用 `protect`。请完成回源连通性、上传/流式请求兼容性、误报处理、IPv4/IPv6 封禁、`nftables` 降级告警、SQLite 备份与恢复、管理端访问隔离等验证。WAF 是纵深防御的一层，不能替代应用认证授权、输入校验、依赖治理、漏洞修复和安全监控。
 
-前端：
+## 开发与测试
 
 ```bash
-cd web
-npm install
-npm run dev
+cd web && npm ci && npm run build:raw && cd ..
+rm -rf internal/dashboard/dist && cp -R web/dist internal/dashboard/dist
+CGO_ENABLED=1 go test ./...
 ```
-
-完整构建：
-
-```bash
-make build
-```
-
-## Release
-
-最新版本请查看 [GitHub Releases](https://github.com/JayLee-sre/ZHIYU-WAF/releases)。
-
-当前正式版本：
-
-- [v1.0.0](https://github.com/JayLee-sre/ZHIYU-WAF/releases/tag/v1.0.0)
 
 ## 许可证
 
-本项目采用 [AGPL-3.0](LICENSE) 协议发布。
-
-如果你计划在商业产品、SaaS 服务、私有化交付或闭源环境中使用，请先确认 AGPL-3.0 的网络服务开源义务，并根据实际场景选择合适的授权方式。
-
-## 免责声明
-
-WAF 是防御体系的一部分，不应替代应用自身的安全开发、依赖治理、身份认证、权限控制和漏洞修复。
-
-在生产环境接入前，请务必完成规则验证、回源连通性检查、误报评估和回滚预案。
+本项目使用 [AGPL-3.0](LICENSE)。请在将其用于网络服务、交付或再分发前，评估相应的开源义务。
