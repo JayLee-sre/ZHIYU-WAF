@@ -45,7 +45,7 @@ func (s *Server) handleSetupPassword(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "密码加密失败"})
 		return
 	}
-	if err := s.store.SetSetting("admin_password_hash", string(hash)); err != nil {
+	if err := s.syncAdminPasswordHash(string(hash)); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "保存密码失败"})
 		return
 	}
@@ -91,11 +91,17 @@ func (s *Server) handleSetupApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Update password if provided
+	// Update password if provided and keep the legacy setup key and the
+	// administrators' user record synchronized.
 	if req.Password != "" && len(req.Password) >= 12 {
 		hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
-		if err == nil {
-			s.store.SetSetting("admin_password_hash", string(hash))
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "密码加密失败"})
+			return
+		}
+		if err := s.syncAdminPasswordHash(string(hash)); err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "保存密码失败"})
+			return
 		}
 	}
 

@@ -82,6 +82,20 @@ func clearLoginAttempts(ip string) {
 	delete(loginAttempts, ip)
 }
 
+// syncAdminPasswordHash keeps the legacy setup value and an existing admin
+// user record aligned. The legacy key remains for safe migration, but regular
+// login must not be broken by a stale users.password_hash.
+func (s *Server) syncAdminPasswordHash(hash string) error {
+	if err := s.store.SetSetting("admin_password_hash", hash); err != nil {
+		return err
+	}
+	user, err := s.store.GetUserByUsername("admin")
+	if err != nil || user == nil {
+		return nil
+	}
+	return s.store.UpdateUserPassword(user.ID, hash)
+}
+
 func init() {
 	// Periodically clean up stale login attempt entries to prevent memory leaks
 	go func() {
@@ -143,6 +157,27 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
+		// Early V2 installations could retain a legacy admin_password_hash after
+		// setup while the existing users.admin hash remained stale. Accept the
+		// validated legacy value only for the admin account, then repair the
+		// users record so all subsequent logins use one canonical credential.
+		if username == "admin" {
+			storedHash, _ := s.store.GetSetting("admin_password_hash")
+			if storedHash != "" && bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(req.Password)) == nil {
+				if syncErr := s.store.UpdateUserPassword(user.ID, storedHash); syncErr != nil {
+					log.Printf("login: failed to repair stale admin password hash: %v", syncErr)
+				}
+				clearLoginAttempts(clientIP)
+				s.recordAudit(username, clientIP, "login", "success", "dashboard login (legacy hash repaired)")
+				token, tokenErr := GenerateToken(s.cfg.Dashboard.JWTSecret, user.Username, user.Role)
+				if tokenErr != nil {
+					http.Error(w, `{"error":"failed to generate token"}`, http.StatusInternalServerError)
+					return
+				}
+				writeJSON(w, http.StatusOK, map[string]string{"token": token})
+				return
+			}
+		}
 		if locked := recordLoginFailure(clientIP); locked {
 			log.Printf("IP %s locked due to too many failed login attempts", clientIP)
 		}

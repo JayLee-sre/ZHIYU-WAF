@@ -299,3 +299,74 @@ func TestIntegrationSettingsFlow(t *testing.T) {
 	}
 	resp.Body.Close()
 }
+
+func TestIntegrationAdminLegacyPasswordRepairsStaleUserHash(t *testing.T) {
+	ts, s := setupTestServer(t)
+
+	staleHash, err := bcrypt.GenerateFromPassword([]byte("stale-password-123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateUser(model.User{
+		ID:           "stale-admin-user",
+		Username:     "admin",
+		PasswordHash: string(staleHash),
+		Role:         "admin",
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	canonicalPassword := "canonical-password-123"
+	canonicalHash, err := bcrypt.GenerateFromPassword([]byte(canonicalPassword), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SetSetting("admin_password_hash", string(canonicalHash)); err != nil {
+		t.Fatal(err)
+	}
+
+	// This reproduces the production failure: an existing users.admin hash is
+	// stale while the initial-setup password lives in the legacy setting.
+	if status := loginStatus(t, ts.URL, "admin", canonicalPassword); status != http.StatusOK {
+		t.Fatalf("canonical setup password should log in, got %d", status)
+	}
+
+	user, err := s.GetUserByUsername("admin")
+	if err != nil || user == nil {
+		t.Fatalf("expected admin user after repair: %v", err)
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(canonicalPassword)); err != nil {
+		t.Fatalf("expected stale user hash to be repaired: %v", err)
+	}
+	if status := loginStatus(t, ts.URL, "admin", "stale-password-123"); status != http.StatusUnauthorized {
+		t.Fatalf("stale password should remain rejected, got %d", status)
+	}
+}
+
+func TestSyncAdminPasswordHashUpdatesExistingAdmin(t *testing.T) {
+	_, s := setupTestServer(t)
+	oldHash, err := bcrypt.GenerateFromPassword([]byte("old-password-123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.CreateUser(model.User{ID: "sync-admin-user", Username: "admin", PasswordHash: string(oldHash), Role: "admin"}); err != nil {
+		t.Fatal(err)
+	}
+	newHash, err := bcrypt.GenerateFromPassword([]byte("new-password-123"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ds := NewServer(config.DefaultConfig(), s)
+	if err := ds.syncAdminPasswordHash(string(newHash)); err != nil {
+		t.Fatal(err)
+	}
+	user, err := s.GetUserByUsername("admin")
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte("new-password-123")) != nil {
+		t.Fatalf("expected admin user hash to be synchronized: %v", err)
+	}
+	storedHash, err := s.GetSetting("admin_password_hash")
+	if err != nil || bcrypt.CompareHashAndPassword([]byte(storedHash), []byte("new-password-123")) != nil {
+		t.Fatalf("expected legacy setting to be synchronized: %v", err)
+	}
+}
