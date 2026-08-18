@@ -8,8 +8,8 @@
   --primary-hover: #1d4ed8;
   --primary-light: #eff6ff;
   --primary-text:  #1d4ed8;
-  --accent:        #0f766e;
-  --accent-light:  #ecfdf5;
+  --accent:        #2563eb;
+  --accent-light:  #eff6ff;
 
   /* ── Semantic ── */
   --danger:  #dc2626;
@@ -27,17 +27,17 @@
   --text-primary:   #0f172a;
   --text-secondary: #475569;
   --text-muted:     #94a3b8;
-  --border:         #d9e3f0;
-  --border-light:   #eaf0f7;
-  --bg-page:        #f4f7fb;
+  --border:         #e2e8f0;
+  --border-light:   #eef2f7;
+  --bg-page:        #f8fafc;
   --bg-card:        #ffffff;
   --bg-hover:       #f8fafc;
-  --bg-subtle:      #fafbfc;
+  --bg-subtle:      #f8fafc;
   --surface-1:      #ffffff;
   --surface-2:      #f8fafc;
-  --surface-3:      #eef4fb;
-  --shadow-card:    0 1px 2px rgba(15,23,42,.03), 0 12px 28px rgba(15,23,42,.055);
-  --shadow-raised:  0 18px 42px rgba(15,23,42,.10);
+  --surface-3:      #f1f5f9;
+  --shadow-card:    0 1px 2px rgba(15,23,42,.025);
+  --shadow-raised:  0 6px 18px rgba(15,23,42,.06);
 
   /* ── Spacing ── */
   --page-gap:    16px;
@@ -46,11 +46,11 @@
   --head-pad:    11px 16px;
 
   /* ── Radius ── */
-  --radius-card:   14px;
-  --radius-btn:    9px;
+  --radius-card:   10px;
+  --radius-btn:    7px;
   --radius-pill:   999px;
-  --radius-input:  9px;
-  --radius-badge:  6px;
+  --radius-input:  7px;
+  --radius-badge:  5px;
 
   /* ── Font ── */
   --font-mono: 'JetBrains Mono', ui-monospace, Menlo, Consolas, monospace;
@@ -71,9 +71,7 @@
 html, body, #app { height: 100%; }
 body {
   font-family: var(--font-body);
-  background:
-    radial-gradient(circle at 18% -10%, rgba(37,99,235,.08), transparent 28%),
-    linear-gradient(180deg, #f7f9fd 0%, var(--bg-page) 42%, #f8fafc 100%);
+  background: var(--bg-page);
   color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
@@ -110,8 +108,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
-  box-shadow: var(--shadow-card);
+  background: #fff;
+  box-shadow: none;
 }
 .heading-group {
   display: flex;
@@ -559,8 +557,8 @@ button, a, input, select, textarea { -webkit-tap-highlight-color: transparent; }
   padding: 42px 24px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
-  box-shadow: var(--shadow-card);
+  background: #fff;
+  box-shadow: none;
   text-align: center;
 }
 
@@ -793,8 +791,8 @@ body .page .scope-toolbar {
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: var(--radius-card);
-  background: linear-gradient(180deg, #fff 0%, #fbfdff 100%);
-  box-shadow: var(--shadow-card);
+  background: #fff;
+  box-shadow: none;
 }
 
 body .page .table-card,
